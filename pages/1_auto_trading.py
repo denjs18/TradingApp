@@ -24,17 +24,32 @@ from config import (
     DEFAULT_MAX_OPEN_POSITIONS,
 )
 from utils.formatters import format_currency, format_percentage
+from utils.ui_theme import (
+    inject_css,
+    apply_chart_theme,
+    candlestick_trace,
+    sma_trace,
+    page_header,
+    section_title,
+    status_badge,
+    GOLD,
+    GREEN,
+    RED,
+    ORANGE,
+    TEXT_SECONDARY,
+    TEXT_MUTED,
+)
 
 init_db()
 
-st.set_page_config(page_title="Trading Auto", page_icon="🤖", layout="wide")
-st.title("🤖 Trading Automatique (Paper Trading)")
+st.set_page_config(page_title="Trading Auto — Euronext", page_icon="◈", layout="wide")
+inject_css()
 
-# --- Profils predefinis pour debutants ---
+# --- Profils ---
 STRATEGY_PROFILES = {
     "prudent": {
-        "name": "🛡️ Prudent",
-        "description": "Faible risque, gains moderes. Ideal pour debuter.",
+        "name": "Prudent",
+        "description": "Faible risque, gains modérés. Idéal pour débuter.",
         "strategy": "mean_reversion",
         "stop_loss": -1.5,
         "take_profit": 2.0,
@@ -42,8 +57,8 @@ STRATEGY_PROFILES = {
         "max_positions": 3,
     },
     "equilibre": {
-        "name": "⚖️ Equilibre",
-        "description": "Risque modere, bon compromis gains/securite.",
+        "name": "Équilibré",
+        "description": "Risque modéré, bon compromis gains / sécurité.",
         "strategy": "combined",
         "stop_loss": -2.5,
         "take_profit": 4.0,
@@ -51,8 +66,8 @@ STRATEGY_PROFILES = {
         "max_positions": 5,
     },
     "dynamique": {
-        "name": "🚀 Dynamique",
-        "description": "Risque eleve, potentiel de gains importants.",
+        "name": "Dynamique",
+        "description": "Risque élevé, potentiel de gains importants.",
         "strategy": "momentum",
         "stop_loss": -4.0,
         "take_profit": 8.0,
@@ -63,132 +78,108 @@ STRATEGY_PROFILES = {
 
 STRATEGY_EXPLANATIONS = {
     "momentum": {
-        "name": "📈 Momentum",
+        "name": "Momentum",
         "short": "Suit la tendance",
         "description": """
-**Comment ca marche ?**
-Achete les actions qui montent deja, en pariant que la hausse va continuer.
+**Comment ça marche ?**
+Achète les actions qui montent déjà, en pariant que la hausse va continuer.
 
 **Quand l'utiliser ?**
-- Marche en tendance claire (hausse ou baisse)
+- Marché en tendance claire (hausse ou baisse)
 - Actions avec forte dynamique
 
 **Risques :**
 - Peut acheter au sommet si la tendance s'inverse
 - Sensible aux retournements brutaux
 """,
-        "risk_level": "Moyen-Eleve",
-        "best_for": "Marches en tendance",
+        "risk_level": "Moyen-Élevé",
+        "best_for": "Marchés en tendance",
     },
     "mean_reversion": {
-        "name": "🔄 Mean Reversion",
-        "short": "Retour a la moyenne",
+        "name": "Mean Reversion",
+        "short": "Retour à la moyenne",
         "description": """
-**Comment ca marche ?**
-Achete quand le prix est anormalement bas, vend quand il est anormalement haut.
-Parie sur un retour a la "normale".
+**Comment ça marche ?**
+Achète quand le prix est anormalement bas, vend quand il est anormalement haut.
 
 **Quand l'utiliser ?**
 - Actions stables qui oscillent autour d'une moyenne
-- Marches sans tendance claire
+- Marchés sans tendance claire
 
 **Risques :**
 - Peut acheter une action qui continue de baisser
 - Ne fonctionne pas en tendance forte
 """,
         "risk_level": "Moyen",
-        "best_for": "Actions stables, marches calmes",
+        "best_for": "Actions stables, marchés calmes",
     },
     "breakout": {
-        "name": "💥 Breakout",
+        "name": "Breakout",
         "short": "Cassure de niveaux",
         "description": """
-**Comment ca marche ?**
-Detecte quand le prix casse un niveau important (support/resistance).
-Achete sur cassure haussiere, vend sur cassure baissiere.
+**Comment ça marche ?**
+Détecte quand le prix casse un niveau important (support / résistance).
 
 **Quand l'utiliser ?**
-- Apres une periode de consolidation
+- Après une période de consolidation
 - Avec confirmation par le volume
 
 **Risques :**
-- Faux signaux frequents (fausses cassures)
-- Necessite des stop-loss serres
+- Faux signaux fréquents (fausses cassures)
+- Nécessite des stop-loss serrés
 """,
-        "risk_level": "Eleve",
+        "risk_level": "Élevé",
         "best_for": "Traders actifs",
     },
     "combined": {
-        "name": "🎯 Combinee",
-        "short": "Mix des 3 strategies",
+        "name": "Combinée",
+        "short": "Mix des 3 stratégies",
         "description": """
-**Comment ca marche ?**
-Combine les 3 strategies et fait la moyenne des signaux.
-N'agit que si plusieurs strategies sont d'accord.
+**Comment ça marche ?**
+Combine les 3 stratégies et fait la moyenne des signaux.
+N'agit que si plusieurs stratégies sont d'accord.
 
 **Quand l'utiliser ?**
-- Configuration par defaut recommandee
-- Reduit les faux signaux
+- Configuration par défaut recommandée
+- Réduit les faux signaux
 
 **Risques :**
-- Peut manquer certaines opportunites
+- Peut manquer certaines opportunités
 - Signaux plus rares mais plus fiables
 """,
         "risk_level": "Moyen",
-        "best_for": "Debutants et prudents",
+        "best_for": "Débutants et prudents",
     },
 }
 
 PARAM_HELP = {
     "stop_loss": """
-**Stop-Loss** = Limite de perte automatique
+**Stop-Loss** — Limite de perte automatique
 
-Si l'action perd ce pourcentage, elle est vendue automatiquement
-pour limiter les pertes.
+Si l'action perd ce pourcentage, elle est vendue automatiquement.
 
-*Exemple : -2% signifie que si vous achetez a 100€,
-la vente automatique se declenchera a 98€.*
-
-**Conseil :** Plus le stop-loss est serre (proche de 0),
-plus vous limitez les pertes mais plus vous risquez
-d'etre sorti trop tot.
+*Exemple : -2 % → achat à 100 €, vente auto à 98 €.*
 """,
     "take_profit": """
-**Take-Profit** = Objectif de gain automatique
+**Take-Profit** — Objectif de gain automatique
 
-Si l'action gagne ce pourcentage, elle est vendue
-automatiquement pour securiser les gains.
+Si l'action gagne ce pourcentage, elle est vendue automatiquement.
 
-*Exemple : +3% signifie que si vous achetez a 100€,
-la vente automatique se declenchera a 103€.*
-
-**Conseil :** Un ratio gain/risque de 1.5x minimum est recommande.
-(ex: stop-loss -2%, take-profit +3%)
+*Exemple : +3 % → achat à 100 €, vente auto à 103 €.*
 """,
     "max_position": """
-**Taille max position** = % du capital par trade
+**Taille max position** — % du capital par trade
 
-Pourcentage maximum du portefeuille investi dans une seule action.
-
-*Exemple : 20% signifie que sur 10 000€, vous n'investirez
-jamais plus de 2 000€ dans une meme action.*
-
-**Conseil :** Ne jamais depasser 25% pour diversifier le risque.
+*Exemple : 20 % sur 10 000 € = max 2 000 € par action.*
 """,
     "max_positions": """
-**Max positions ouvertes** = Nombre d'actions en portefeuille
+**Max positions ouvertes** — Nombre d'actions en portefeuille simultanément.
 
-Limite le nombre d'actions differentes que vous pouvez
-detenir en meme temps.
-
-*Exemple : 5 positions max = 5 actions differentes maximum.*
-
-**Conseil :** 3-5 positions pour les debutants,
-permet de suivre facilement.
+*Conseil : 3 à 5 positions pour les débutants.*
 """,
 }
 
-# --- Initialiser les composants dans session_state ---
+# --- Session state ---
 if "engine" not in st.session_state:
     st.session_state["engine"] = PaperTradingEngine()
 
@@ -198,13 +189,15 @@ if "scheduler" not in st.session_state:
 engine: PaperTradingEngine = st.session_state["engine"]
 scheduler: TradingScheduler = st.session_state["scheduler"]
 
-# --- Sidebar : Configuration ---
-st.sidebar.header("Configuration du Trading")
+# ── Sidebar ──────────────────────────────────────────────────
+st.sidebar.markdown(
+    '<div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;'
+    'letter-spacing:0.16em;color:#c9a84c;padding:0.25rem 0 1rem;">Configuration</div>',
+    unsafe_allow_html=True,
+)
 
-# --- Section 1: Profils predefinis ---
-st.sidebar.subheader("1. Choisir un profil")
+st.sidebar.markdown("**Profil de risque**")
 
-# Initialiser les valeurs dans session_state si necessaire
 if "profile_applied" not in st.session_state:
     st.session_state["profile_applied"] = "equilibre"
     st.session_state["custom_stop_loss"] = STRATEGY_PROFILES["equilibre"]["stop_loss"]
@@ -213,24 +206,20 @@ if "profile_applied" not in st.session_state:
     st.session_state["custom_max_positions"] = STRATEGY_PROFILES["equilibre"]["max_positions"]
     st.session_state["custom_strategy"] = STRATEGY_PROFILES["equilibre"]["strategy"]
 
-# Afficher les profils comme des boutons radio avec descriptions
-profile_options = list(STRATEGY_PROFILES.keys())
-profile_names = [STRATEGY_PROFILES[p]["name"] for p in profile_options]
-
 selected_profile = st.sidebar.radio(
-    "Profil de risque",
-    profile_options,
-    index=profile_options.index(st.session_state.get("profile_applied", "equilibre")),
+    "Profil",
+    list(STRATEGY_PROFILES.keys()),
+    index=list(STRATEGY_PROFILES.keys()).index(
+        st.session_state.get("profile_applied", "equilibre")
+    ),
     format_func=lambda p: STRATEGY_PROFILES[p]["name"],
-    help="Choisissez un profil adapte a votre tolerance au risque",
+    label_visibility="collapsed",
 )
 
-# Afficher la description du profil selectionne
 profile_info = STRATEGY_PROFILES[selected_profile]
-st.sidebar.info(profile_info["description"])
+st.sidebar.caption(profile_info["description"])
 
-# Bouton pour appliquer le profil
-if st.sidebar.button("✨ Appliquer ce profil", type="primary", use_container_width=True):
+if st.sidebar.button("Appliquer ce profil", type="primary", use_container_width=True):
     st.session_state["profile_applied"] = selected_profile
     st.session_state["custom_stop_loss"] = profile_info["stop_loss"]
     st.session_state["custom_take_profit"] = profile_info["take_profit"]
@@ -240,54 +229,42 @@ if st.sidebar.button("✨ Appliquer ce profil", type="primary", use_container_wi
     st.rerun()
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("**Stratégie**")
 
-# --- Section 2: Strategie ---
-st.sidebar.subheader("2. Strategie de trading")
-
-# Selecteur de strategie avec aide
 strategy = st.sidebar.selectbox(
-    "Strategie",
+    "Stratégie",
     STRATEGIES,
     index=STRATEGIES.index(st.session_state.get("custom_strategy", "combined")),
     format_func=lambda s: STRATEGY_EXPLANATIONS[s]["name"],
-    help="La strategie determine quand acheter et vendre",
+    label_visibility="collapsed",
 )
 st.session_state["custom_strategy"] = strategy
 
-# Afficher l'explication de la strategie
 strat_info = STRATEGY_EXPLANATIONS[strategy]
-with st.sidebar.expander(f"📖 Comprendre : {strat_info['short']}", expanded=False):
+with st.sidebar.expander(f"À propos — {strat_info['short']}"):
     st.markdown(strat_info["description"])
     st.markdown(f"**Niveau de risque :** {strat_info['risk_level']}")
-    st.markdown(f"**Ideal pour :** {strat_info['best_for']}")
+    st.markdown(f"**Idéal pour :** {strat_info['best_for']}")
 
 scheduler.set_strategy(strategy)
 
-# Tickers
 st.sidebar.markdown("---")
-st.sidebar.subheader("3. Actions a surveiller")
+st.sidebar.markdown("**Actions surveillées**")
 selected_tickers = st.sidebar.multiselect(
     "Tickers",
     ALL_TICKERS,
     default=DEFAULT_FAVORITES,
-    help="Selectionnez les actions sur lesquelles le robot va trader",
+    label_visibility="collapsed",
 )
 scheduler.set_tickers(selected_tickers)
 
-# --- Section 3: Parametres de risque ---
 st.sidebar.markdown("---")
-st.sidebar.subheader("4. Gestion des risques")
+st.sidebar.markdown("**Gestion des risques**")
 
-# Toggle pour mode avance
-show_advanced = st.sidebar.toggle(
-    "Mode avance",
-    value=False,
-    help="Affiche les parametres detailles pour les utilisateurs experimentes",
-)
+show_advanced = st.sidebar.toggle("Mode avancé", value=False)
 
 if show_advanced:
-    # Afficher les sliders avec aide contextuelle
-    with st.sidebar.expander("❓ Aide : Stop-Loss", expanded=False):
+    with st.sidebar.expander("Stop-Loss"):
         st.markdown(PARAM_HELP["stop_loss"])
 
     stop_loss = st.sidebar.slider(
@@ -295,11 +272,10 @@ if show_advanced:
         -10.0, -0.5,
         st.session_state.get("custom_stop_loss", DEFAULT_STOP_LOSS_PCT),
         0.5,
-        help="Limite de perte automatique",
     )
     st.session_state["custom_stop_loss"] = stop_loss
 
-    with st.sidebar.expander("❓ Aide : Take-Profit", expanded=False):
+    with st.sidebar.expander("Take-Profit"):
         st.markdown(PARAM_HELP["take_profit"])
 
     take_profit = st.sidebar.slider(
@@ -307,19 +283,18 @@ if show_advanced:
         0.5, 15.0,
         st.session_state.get("custom_take_profit", DEFAULT_TAKE_PROFIT_PCT),
         0.5,
-        help="Objectif de gain automatique",
     )
     st.session_state["custom_take_profit"] = take_profit
 
-    # Afficher le ratio risque/gain
     ratio = abs(take_profit / stop_loss) if stop_loss != 0 else 0
-    ratio_color = "green" if ratio >= 1.5 else ("orange" if ratio >= 1 else "red")
+    ratio_color = GREEN if ratio >= 1.5 else (ORANGE if ratio >= 1 else RED)
     st.sidebar.markdown(
-        f"**Ratio gain/risque :** :{ratio_color}[{ratio:.1f}x] "
-        f"{'✅' if ratio >= 1.5 else '⚠️'}"
+        f'<span style="font-size:0.75rem;color:{TEXT_MUTED};">Ratio gain/risque : </span>'
+        f'<span style="font-size:0.8rem;font-weight:600;color:{ratio_color};">{ratio:.1f}×</span>',
+        unsafe_allow_html=True,
     )
 
-    with st.sidebar.expander("❓ Aide : Taille position", expanded=False):
+    with st.sidebar.expander("Taille de position"):
         st.markdown(PARAM_HELP["max_position"])
 
     max_position = st.sidebar.slider(
@@ -327,38 +302,48 @@ if show_advanced:
         5.0, 50.0,
         st.session_state.get("custom_max_position", DEFAULT_MAX_POSITION_PCT),
         5.0,
-        help="% maximum du capital par trade",
     )
     st.session_state["custom_max_position"] = max_position
 
-    with st.sidebar.expander("❓ Aide : Max positions", expanded=False):
+    with st.sidebar.expander("Max positions"):
         st.markdown(PARAM_HELP["max_positions"])
 
     max_positions = st.sidebar.slider(
         "Max positions ouvertes",
         1, 10,
         st.session_state.get("custom_max_positions", DEFAULT_MAX_OPEN_POSITIONS),
-        help="Nombre maximum d'actions en portefeuille",
     )
     st.session_state["custom_max_positions"] = max_positions
 else:
-    # Mode simple : afficher un resume des parametres
     stop_loss = st.session_state.get("custom_stop_loss", DEFAULT_STOP_LOSS_PCT)
     take_profit = st.session_state.get("custom_take_profit", DEFAULT_TAKE_PROFIT_PCT)
     max_position = st.session_state.get("custom_max_position", DEFAULT_MAX_POSITION_PCT)
     max_positions = st.session_state.get("custom_max_positions", DEFAULT_MAX_OPEN_POSITIONS)
 
-    st.sidebar.markdown(f"""
-    **Parametres actuels :**
-    - 🛑 Stop-Loss : **{stop_loss}%**
-    - 🎯 Take-Profit : **+{take_profit}%**
-    - 📊 Max par position : **{max_position}%**
-    - 📈 Max positions : **{max_positions}**
+    st.sidebar.markdown(
+        f"""
+        <div style="
+            background:#111119;
+            border:1px solid rgba(201,168,76,0.15);
+            border-radius:3px;
+            padding:0.85rem 1rem;
+            font-size:0.75rem;
+            line-height:1.9;
+            color:#9494a6;
+        ">
+            <span style="color:#5a5a6e;">Stop-Loss</span>&nbsp;&nbsp;
+            <span style="color:#f0ede0;font-weight:600;">{stop_loss}%</span><br>
+            <span style="color:#5a5a6e;">Take-Profit</span>&nbsp;&nbsp;
+            <span style="color:#f0ede0;font-weight:600;">+{take_profit}%</span><br>
+            <span style="color:#5a5a6e;">Max / position</span>&nbsp;&nbsp;
+            <span style="color:#f0ede0;font-weight:600;">{max_position}%</span><br>
+            <span style="color:#5a5a6e;">Max positions</span>&nbsp;&nbsp;
+            <span style="color:#f0ede0;font-weight:600;">{max_positions}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    *Activez le "Mode avance" pour modifier.*
-    """)
-
-# Mettre a jour le risk manager
 scheduler.risk_manager = RiskManager(
     stop_loss_pct=stop_loss,
     take_profit_pct=take_profit,
@@ -366,94 +351,102 @@ scheduler.risk_manager = RiskManager(
     max_open_positions=max_positions,
 )
 
-# --- Controles Start/Stop/Pause ---
-st.subheader("Controles")
+# ── Page header ───────────────────────────────────────────────
+page_header("Trading Automatique", "Paper trading — simulation temps réel")
 
+# ── Market status + controls ──────────────────────────────────
 market_status = get_market_status()
-status_text = "🟢 Marche ouvert" if market_status["is_open"] else "🔴 Marche ferme"
-st.markdown(f"**Statut du marche** : {status_text}")
+sched_status = scheduler.get_status()
 
-col_ctrl1, col_ctrl2, col_ctrl3, col_ctrl4 = st.columns(4)
+status_col, ctrl_col = st.columns([1, 3])
 
-with col_ctrl1:
-    if st.button(
-        "▶️ Demarrer" if not scheduler.is_running else "⏸️ En cours...",
-        type="primary" if not scheduler.is_running else "secondary",
-        disabled=scheduler.is_running,
-    ):
-        scheduler.start()
-        st.success("Trading automatique demarre.")
-        st.rerun()
-
-with col_ctrl2:
-    if st.button("⏹️ Arreter", disabled=not scheduler.is_running):
-        scheduler.stop()
-        st.info("Trading automatique arrete.")
-        st.rerun()
-
-with col_ctrl3:
-    if st.button("🔄 Reset Portefeuille"):
-        scheduler.stop()
-        balance = st.session_state.get("reset_balance", DEFAULT_INITIAL_BALANCE)
-        engine.reset(balance)
-        st.warning("Portefeuille reinitialise.")
-        st.rerun()
-
-with col_ctrl4:
-    st.number_input(
-        "Solde initial (EUR)",
-        min_value=100.0,
-        value=DEFAULT_INITIAL_BALANCE,
-        step=100.0,
-        key="reset_balance",
+with status_col:
+    market_html = status_badge(
+        "Marché ouvert" if market_status["is_open"] else "Marché fermé",
+        market_status["is_open"],
+    )
+    trading_html = status_badge(
+        "Trading actif" if sched_status["is_running"] else "Trading inactif",
+        sched_status["is_running"],
+    )
+    st.markdown(
+        f'<div style="display:flex;flex-direction:column;gap:0.5rem;padding-top:0.35rem;">'
+        f"{market_html}{trading_html}</div>",
+        unsafe_allow_html=True,
     )
 
-# Statut du scheduler
-sched_status = scheduler.get_status()
+with ctrl_col:
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        if st.button(
+            "Démarrer" if not scheduler.is_running else "En cours…",
+            type="primary" if not scheduler.is_running else "secondary",
+            disabled=scheduler.is_running,
+            use_container_width=True,
+        ):
+            scheduler.start()
+            st.success("Trading automatique démarré.")
+            st.rerun()
+    with c2:
+        if st.button("Arrêter", disabled=not scheduler.is_running, use_container_width=True):
+            scheduler.stop()
+            st.info("Trading automatique arrêté.")
+            st.rerun()
+    with c3:
+        if st.button("Réinitialiser", use_container_width=True):
+            scheduler.stop()
+            balance = st.session_state.get("reset_balance", DEFAULT_INITIAL_BALANCE)
+            engine.reset(balance)
+            st.warning("Portefeuille réinitialisé.")
+            st.rerun()
+    with c4:
+        st.number_input(
+            "Solde initial (EUR)",
+            min_value=100.0,
+            value=DEFAULT_INITIAL_BALANCE,
+            step=100.0,
+            key="reset_balance",
+            label_visibility="collapsed",
+        )
+
 st.markdown(
-    f"**Trading** : {'🟢 Actif' if sched_status['is_running'] else '🔴 Inactif'} "
-    f"| **Strategie** : {sched_status['strategy']} "
-    f"| **Tickers** : {len(sched_status['tickers'])} "
-    f"| **Dernier cycle** : {sched_status['last_run'] or 'N/A'}"
+    f'<p style="font-size:0.7rem;color:#5a5a6e;margin-top:0.5rem;">'
+    f'Stratégie : <span style="color:#9494a6;">{sched_status["strategy"]}</span>'
+    f'&ensp;·&ensp;Tickers : <span style="color:#9494a6;">{len(sched_status["tickers"])}</span>'
+    f'&ensp;·&ensp;Dernier cycle : <span style="color:#9494a6;">{sched_status["last_run"] or "—"}</span>'
+    f'</p>',
+    unsafe_allow_html=True,
 )
 
-st.markdown("---")
-
-# --- Etat du portefeuille ---
-st.header("Portefeuille Virtuel")
+# ── Portfolio summary ─────────────────────────────────────────
+section_title("Portefeuille Virtuel")
 
 summary = engine.get_portfolio_summary()
-
-col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("💰 Cash", format_currency(summary["cash"]))
-col2.metric("📊 Positions", format_currency(summary["positions_value"]))
-col3.metric("💼 Total", format_currency(summary["total_value"]))
-col4.metric("📈 Positions ouvertes", summary["num_positions"])
-
-# P&L total
 initial = DEFAULT_INITIAL_BALANCE
 total_pnl = summary["total_value"] - initial
 total_pnl_pct = (total_pnl / initial * 100) if initial > 0 else 0
-col5.metric(
-    "P&L Total",
-    format_currency(total_pnl),
-    delta=format_percentage(total_pnl_pct),
-)
 
-# --- Positions ouvertes ---
+m1, m2, m3, m4, m5 = st.columns(5)
+m1.metric("Cash disponible", format_currency(summary["cash"]))
+m2.metric("Positions", format_currency(summary["positions_value"]))
+m3.metric("Valeur totale", format_currency(summary["total_value"]))
+m4.metric("Positions ouvertes", summary["num_positions"])
+m5.metric("P&L Total", format_currency(total_pnl), delta=format_percentage(total_pnl_pct))
+
+# ── Open positions ────────────────────────────────────────────
 if summary["positions"]:
-    st.subheader("Positions Ouvertes")
+    section_title("Positions Ouvertes")
 
     pos_data = []
     for pos in summary["positions"]:
         pos_data.append({
             "Ticker": pos["ticker"],
             "Actions": pos["shares"],
-            "Prix Entree": pos["entry_price"],
-            "Prix Actuel": pos.get("current_price", 0),
+            "Entrée": pos["entry_price"],
+            "Cours": pos.get("current_price", 0),
             "Valeur": pos.get("current_value", 0),
-            "P&L (EUR)": pos.get("pnl", 0),
-            "P&L (%)": pos.get("pnl_pct", 0),
+            "P&L €": pos.get("pnl", 0),
+            "P&L %": pos.get("pnl_pct", 0),
             "Stop-Loss": pos.get("stop_loss"),
             "Take-Profit": pos.get("take_profit"),
         })
@@ -462,88 +455,84 @@ if summary["positions"]:
     st.dataframe(
         pos_df.style.format({
             "Actions": "{:.2f}",
-            "Prix Entree": "{:.2f}",
-            "Prix Actuel": "{:.2f}",
+            "Entrée": "{:.2f}",
+            "Cours": "{:.2f}",
             "Valeur": "{:.2f}",
-            "P&L (EUR)": "{:+.2f}",
-            "P&L (%)": "{:+.2f}%",
+            "P&L €": "{:+.2f}",
+            "P&L %": "{:+.2f}%",
             "Stop-Loss": "{:.2f}",
             "Take-Profit": "{:.2f}",
         }).map(
-            lambda v: f"color: {'green' if v > 0 else 'red' if v < 0 else 'gray'}"
-            if isinstance(v, (int, float)) else "",
-            subset=["P&L (EUR)", "P&L (%)"],
+            lambda v: (
+                f"color: {GREEN}" if isinstance(v, (int, float)) and v > 0
+                else f"color: {RED}" if isinstance(v, (int, float)) and v < 0
+                else ""
+            ),
+            subset=["P&L €", "P&L %"],
         ),
         use_container_width=True,
         hide_index=True,
     )
 
-    # Graphiques des positions
-    st.subheader("Graphiques des Positions")
+    section_title("Graphiques des Positions")
 
     for pos in summary["positions"]:
-        with st.expander(f"{pos['ticker']} — P&L: {pos.get('pnl', 0):+.2f} EUR"):
+        pnl_val = pos.get("pnl", 0)
+        pnl_color = GREEN if pnl_val >= 0 else RED
+        with st.expander(
+            f"{pos['ticker']}  ·  P&L {pnl_val:+.2f} €"
+        ):
             hist = get_historical_data(pos["ticker"], period="1mo")
             if not hist.empty:
                 hist = compute_indicators(hist)
                 fig = go.Figure()
-                fig.add_trace(go.Candlestick(
-                    x=hist.index,
-                    open=hist["Open"],
-                    high=hist["High"],
-                    low=hist["Low"],
-                    close=hist["Close"],
-                    name="Prix",
-                ))
+                fig.add_trace(candlestick_trace(hist))
 
-                # Ligne d'entree
                 fig.add_hline(
                     y=pos["entry_price"],
                     line_dash="dash",
-                    line_color="blue",
-                    annotation_text=f"Entree: {pos['entry_price']:.2f}",
+                    line_color=GOLD,
+                    line_width=1,
+                    annotation_text=f"Entrée {pos['entry_price']:.2f}",
+                    annotation_font=dict(color=GOLD, size=10),
                 )
-
-                # Stop-loss
                 if pos.get("stop_loss"):
                     fig.add_hline(
                         y=pos["stop_loss"],
                         line_dash="dot",
-                        line_color="red",
-                        annotation_text=f"SL: {pos['stop_loss']:.2f}",
+                        line_color=RED,
+                        line_width=1,
+                        annotation_text=f"SL {pos['stop_loss']:.2f}",
+                        annotation_font=dict(color=RED, size=10),
                     )
-
-                # Take-profit
                 if pos.get("take_profit"):
                     fig.add_hline(
                         y=pos["take_profit"],
                         line_dash="dot",
-                        line_color="green",
-                        annotation_text=f"TP: {pos['take_profit']:.2f}",
+                        line_color=GREEN,
+                        line_width=1,
+                        annotation_text=f"TP {pos['take_profit']:.2f}",
+                        annotation_font=dict(color=GREEN, size=10),
                     )
 
-                fig.update_layout(
-                    title=pos["ticker"],
-                    height=350,
-                    xaxis_rangeslider_visible=False,
-                )
-                st.plotly_chart(fig, use_container_width=True)
+                apply_chart_theme(fig, height=340, title=pos["ticker"])
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-# --- Metriques de performance ---
-st.header("Performance")
+# ── Performance metrics ───────────────────────────────────────
+section_title("Performance")
 
 metrics = engine.get_performance_metrics()
 
-mcol1, mcol2, mcol3, mcol4, mcol5, mcol6 = st.columns(6)
-mcol1.metric("Trades Total", metrics["total_trades"])
-mcol2.metric("Trades Clotures", metrics.get("closed_trades", 0))
-mcol3.metric("Win Rate", f"{metrics['win_rate']:.1f}%")
-mcol4.metric("P&L Total", format_currency(metrics["total_pnl"]))
-mcol5.metric("Max Drawdown", format_currency(metrics["max_drawdown"]))
-mcol6.metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
+pm1, pm2, pm3, pm4, pm5, pm6 = st.columns(6)
+pm1.metric("Trades total", metrics["total_trades"])
+pm2.metric("Trades clôturés", metrics.get("closed_trades", 0))
+pm3.metric("Win Rate", f"{metrics['win_rate']:.1f}%")
+pm4.metric("P&L total", format_currency(metrics["total_pnl"]))
+pm5.metric("Max Drawdown", format_currency(metrics["max_drawdown"]))
+pm6.metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
 
-# --- Courbe de performance ---
-st.subheader("Courbe de Performance")
+# ── Performance curve ─────────────────────────────────────────
+section_title("Courbe de Performance")
 
 with get_db() as conn:
     snapshots = conn.execute(
@@ -554,45 +543,48 @@ if snapshots and len(snapshots) > 1:
     snap_df = pd.DataFrame([dict(s) for s in snapshots])
     snap_df["snapshot_at"] = pd.to_datetime(snap_df["snapshot_at"])
 
-    fig_perf = px.line(
-        snap_df,
-        x="snapshot_at",
-        y="total_value",
-        title="Evolution de la valeur du portefeuille",
-        labels={"snapshot_at": "Date", "total_value": "Valeur (EUR)"},
-    )
+    fig_perf = go.Figure()
+    fig_perf.add_trace(go.Scatter(
+        x=snap_df["snapshot_at"],
+        y=snap_df["total_value"],
+        mode="lines",
+        name="Valeur",
+        line=dict(color=GOLD, width=2),
+        fill="tozeroy",
+        fillcolor="rgba(201,168,76,0.06)",
+    ))
     fig_perf.add_hline(
         y=DEFAULT_INITIAL_BALANCE,
         line_dash="dash",
-        line_color="gray",
+        line_color="rgba(201,168,76,0.3)",
+        line_width=1,
         annotation_text="Capital initial",
+        annotation_font=dict(color=TEXT_MUTED, size=10),
     )
-    fig_perf.update_layout(height=400)
-    st.plotly_chart(fig_perf, use_container_width=True)
+    apply_chart_theme(fig_perf, height=380, title="Évolution de la valeur du portefeuille")
+    fig_perf.update_layout(yaxis=dict(side="right"))
+    st.plotly_chart(fig_perf, use_container_width=True, config={"displayModeBar": False})
 else:
-    st.info("La courbe de performance sera disponible apres quelques cycles de trading.")
+    st.info("La courbe de performance sera disponible après quelques cycles de trading.")
 
-# --- Historique des trades ---
-st.header("Historique des Trades")
+# ── Trade history ─────────────────────────────────────────────
+section_title("Historique des Trades")
 
 trades = engine.get_all_trades()
 if trades:
     trades_df = pd.DataFrame(trades)
     display_cols = ["executed_at", "ticker", "side", "shares", "price", "total", "strategy", "reason"]
     available_cols = [c for c in display_cols if c in trades_df.columns]
-    trades_df = trades_df[available_cols]
-
-    trades_df = trades_df.rename(columns={
+    trades_df = trades_df[available_cols].rename(columns={
         "executed_at": "Date",
         "ticker": "Ticker",
         "side": "Type",
         "shares": "Actions",
         "price": "Prix",
         "total": "Total",
-        "strategy": "Strategie",
+        "strategy": "Stratégie",
         "reason": "Raison",
     })
-
     st.dataframe(
         trades_df.style.format({
             "Actions": "{:.2f}",
@@ -603,22 +595,29 @@ if trades:
         hide_index=True,
     )
 else:
-    st.info("Aucun trade execute.")
+    st.info("Aucun trade exécuté.")
 
-# --- Logs ---
-st.header("Logs de Trading")
+# ── Logs ──────────────────────────────────────────────────────
+section_title("Logs de Trading")
 
 logs = engine.get_logs(limit=30)
 if logs:
+    log_html = '<div style="background:#111119;border:1px solid rgba(201,168,76,0.12);border-radius:4px;padding:0.75rem 1rem;font-family:\'JetBrains Mono\',monospace;font-size:0.7rem;line-height:1.9;max-height:280px;overflow-y:auto;">'
     for log in logs:
         level = log["level"]
-        icon = {"INFO": "ℹ️", "WARNING": "⚠️", "ERROR": "❌"}.get(level, "📋")
-        st.text(f"{icon} [{log['created_at']}] {log['message']}")
+        color = {"INFO": TEXT_SECONDARY, "WARNING": ORANGE, "ERROR": RED}.get(level, TEXT_MUTED)
+        log_html += (
+            f'<div><span style="color:{TEXT_MUTED};">{log["created_at"]}</span>'
+            f'&ensp;<span style="color:{color};font-weight:500;">[{level}]</span>'
+            f'&ensp;<span style="color:{TEXT_SECONDARY};">{log["message"]}</span></div>'
+        )
+    log_html += "</div>"
+    st.markdown(log_html, unsafe_allow_html=True)
 else:
     st.info("Aucun log disponible.")
 
 st.markdown("---")
 st.caption(
     "Paper trading — simulation avec argent fictif. "
-    "Les resultats passes ne garantissent pas les performances futures."
+    "Les résultats passés ne garantissent pas les performances futures."
 )
