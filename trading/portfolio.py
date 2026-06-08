@@ -44,12 +44,24 @@ def add_position(ticker: str, shares: float, avg_price: float):
 
 def update_position(ticker: str, shares: float, avg_price: float):
     """Met a jour une position existante (ecrase les valeurs)."""
+    from database.db import USE_POSTGRES
     with get_db() as conn:
-        conn.execute(
-            """INSERT OR REPLACE INTO portfolio_positions (ticker, shares, avg_price, updated_at)
-               VALUES (?, ?, ?, CURRENT_TIMESTAMP)""",
-            (ticker, shares, avg_price),
-        )
+        if USE_POSTGRES:
+            conn.execute(
+                """INSERT INTO portfolio_positions (ticker, shares, avg_price, updated_at)
+                   VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                   ON CONFLICT (ticker) DO UPDATE SET
+                     shares = EXCLUDED.shares,
+                     avg_price = EXCLUDED.avg_price,
+                     updated_at = CURRENT_TIMESTAMP""",
+                (ticker, shares, avg_price),
+            )
+        else:
+            conn.execute(
+                """INSERT OR REPLACE INTO portfolio_positions (ticker, shares, avg_price, updated_at)
+                   VALUES (?, ?, ?, CURRENT_TIMESTAMP)""",
+                (ticker, shares, avg_price),
+            )
 
 
 def remove_position(ticker: str):
