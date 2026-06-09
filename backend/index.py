@@ -36,11 +36,22 @@ from config import (
 app = Flask(__name__)
 CORS(app)
 
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Retourne toutes les erreurs non gérées en JSON avec le traceback."""
+    import traceback
+    tb = traceback.format_exc()
+    print(f"[ERROR] {e}\n{tb}")
+    return jsonify({"error": str(e), "traceback": tb}), 500
+
+
 # Initialiser la base de données au démarrage
 try:
     init_db()
 except Exception as e:
-    print(f"Warning: init_db failed: {e}")
+    import traceback
+    print(f"Warning: init_db failed: {e}\n{traceback.format_exc()}")
 
 engine = PaperTradingEngine()
 
