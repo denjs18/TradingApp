@@ -37,6 +37,30 @@ app = Flask(__name__)
 CORS(app)
 
 
+def sanitize(obj):
+    """Recursively convert numpy/pandas types to native Python types for JSON serialization."""
+    import numpy as np
+    if isinstance(obj, dict):
+        return {k: sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [sanitize(v) for v in obj]
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    if isinstance(obj, (np.bool_,)):
+        return bool(obj)
+    if isinstance(obj, np.ndarray):
+        return sanitize(obj.tolist())
+    try:
+        import pandas as pd
+        if isinstance(obj, pd.NA.__class__) or (hasattr(pd, 'isna') and pd.isna(obj)):
+            return None
+    except Exception:
+        pass
+    return obj
+
+
 @app.errorhandler(Exception)
 def handle_exception(e):
     """Retourne toutes les erreurs non gérées en JSON avec le traceback."""
@@ -302,7 +326,7 @@ def opportunity_analyze():
             errors.append({"ticker": ticker, "error": str(e)})
 
     results.sort(key=lambda x: x["score"], reverse=True)
-    return jsonify({"results": results, "errors": errors})
+    return jsonify(sanitize({"results": results, "errors": errors}))
 
 
 @app.route("/api/opportunities/news/<ticker>")
