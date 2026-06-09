@@ -486,58 +486,66 @@ def dca_history():
 # ── Cron (remplace APScheduler) ───────────────────────────────
 
 ALL_PEA_TICKERS = [
-    # France — Défense & Aéro
-    "AIR.PA", "SAF.PA", "HO.PA", "AM.PA", "TEC.PA",
-    # France — Luxe & Beauté
-    "MC.PA", "KER.PA", "RMS.PA", "OR.PA", "PUB.PA",
-    # France — Banque & Assurance
-    "BNP.PA", "GLE.PA", "ACA.PA", "AXA.PA", "CNP.PA",
-    # France — Énergie
-    "TTE.PA", "ENGI.PA", "GTT.PA",
-    # France — Technologie & IT
-    "CAP.PA", "DSY.PA", "STM.PA", "ATO.PA", "ALTEN.PA", "OVH.PA",
-    # France — Santé & Pharma
-    "SAN.PA", "EL.PA", "IPH.PA", "ERF.PA", "GENFIT.PA",
-    # France — Industrie
-    "SU.PA", "SGO.PA", "LR.PA", "ALO.PA", "SEB.PA", "WLN.PA", "VIE.PA", "DG.PA", "AI.PA", "NK.PA",
-    # France — Automobile
-    "RNO.PA", "STLAM.PA", "ML.PA", "FRVIA.PA",
-    # France — Télécom
-    "ORA.PA", "ILD.PA",
-    # France — Distribution
-    "CA.PA", "RXL.PA", "FNAC.PA",
-    # France — Immobilier
-    "URW.PA", "COV.PA", "ICAD.PA", "LI.PA", "ALTAREA.PA",
-    # France — Matériaux
-    "MT.PA", "VK.PA", "ERAMET.PA",
-    # France — Médias
-    "VIV.PA", "TF1.PA", "M6.PA", "LAGR.PA",
-    # France — Agro & Boissons
-    "BN.PA", "RI.PA", "RCO.PA", "BON.PA",
-    # France — Transport & Infra
-    "ADP.PA", "AF.PA", "GETLINK.PA", "AC.PA",
-    # France — Divers
-    "EDEN.PA", "BOL.PA",
-    # Allemagne (Xetra)
-    "SIE.DE", "DTE.DE", "BAS.DE", "BAYN.DE", "MRK.DE", "RWE.DE", "EON.DE",
-    "BMW.DE", "VOW3.DE", "MBG.DE", "PAH3.DE",
-    "DBK.DE", "ALV.DE", "MUV2.DE", "CBK.DE",
-    "FRE.DE", "FME.DE", "SAP.DE",
-    "ADS.DE", "PUM.DE",
-    # Pays-Bas
-    "ASML.AS", "HEIA.AS", "INGA.AS", "PHIA.AS", "NN.AS", "WKL.AS", "RAND.AS", "ABN.AS",
-    # Belgique
-    "UCB.BR", "SOLB.BR", "ACKB.BR", "ABI.BR", "COLR.BR",
-    # Italie
-    "ENI.MI", "ENEL.MI", "ISP.MI", "UCG.MI", "LDO.MI", "RACE.MI", "G.MI",
-    # Espagne
-    "SAN.MC", "BBVA.MC", "ITX.MC", "IBE.MC", "REP.MC", "TEF.MC",
-    # Suède
-    "VOLV-B.ST", "ERIC-B.ST", "ATCO-A.ST", "SEB-A.ST", "SWED-A.ST", "SAND.ST",
-    # Danemark
-    "NOVO-B.CO", "MAERSK-B.CO", "DSV.CO", "COLO-B.CO", "CARL-B.CO",
-    # Finlande
-    "NOKIA.HE", "FORTUM.HE", "NESTE.HE", "UPM.HE",
+    # CAC 40
+    "AC.PA","AI.PA","AIR.PA","AXA.PA","BNP.PA","BN.PA","BVI.PA","CA.PA","CAP.PA",
+    "ACA.PA","DG.PA","DSY.PA","EDEN.PA","EL.PA","ENGI.PA","ERF.PA","GLE.PA",
+    "HO.PA","KER.PA","LR.PA","MC.PA","ML.PA","MT.AS","OR.PA","ORA.PA","PUB.PA",
+    "RI.PA","RMS.PA","RNO.PA","SAF.PA","SAN.PA","SGO.PA","SU.PA","STLAM.PA",
+    "STM.PA","TEP.PA","TTE.PA","URW.PA","VIE.PA","EN.PA","VIV.PA",
+    # CAC Next 20
+    "AF.PA","AKE.PA","BIM.PA","FGR.PA","ENX.PA","GET.PA","LI.PA","RCO.PA",
+    "RXL.PA","DIM.PA","SW.PA","SOI.PA","UBI.PA","FR.PA","GFC.PA",
+    # SBF 120 supplémentaires
+    "ADP.PA","ALO.PA","ALTEN.PA","AM.PA","ALTAREA.PA","BOL.PA","BON.PA",
+    "COV.PA","ERAMET.PA","FNAC.PA","GENFIT.PA","GTT.PA","ICAD.PA",
+    "ILD.PA","IPH.PA","LAGR.PA","M6.PA","NK.PA","OVH.PA","SEB.PA",
+    "TEC.PA","TF1.PA","VK.PA","WLN.PA","FRVIA.PA",
+    # DAX 40
+    "ADS.DE","ALV.DE","BAS.DE","BAYN.DE","BEI.DE","BMW.DE","BNR.DE","CBK.DE",
+    "CON.DE","DBK.DE","DB1.DE","DHL.DE","DTG.DE","DTE.DE","EOAN.DE","FME.DE",
+    "FRE.DE","G1A.DE","HEI.DE","HEN3.DE","HNR1.DE","IFX.DE","MBG.DE","MRK.DE",
+    "MTX.DE","MUV2.DE","PAH3.DE","QIA.DE","RHM.DE","RWE.DE","SAP.DE","SHL.DE",
+    "SIE.DE","ENR.DE","SY1.DE","VNA.DE","VOW3.DE","ZAL.DE","G24.DE",
+    # AEX Pays-Bas
+    "ABN.AS","ADYEN.AS","AGN.AS","AD.AS","AKZA.AS","ASM.AS","ASML.AS","ASRNL.AS",
+    "BESI.AS","DSFIR.AS","EXO.AS","HEIA.AS","IMCD.AS","INGA.AS","KPN.AS",
+    "MT.AS","NN.AS","PHIA.AS","PRX.AS","RAND.AS","UMG.AS","WKL.AS",
+    # BEL 20 Belgique
+    "ABI.BR","ACKB.BR","AED.BR","AGS.BR","ARGX.BR","APAM.BR","AZE.BR",
+    "DIE.BR","ELI.BR","GBLB.BR","KBC.BR","LOTB.BR","MELE.BR","MONT.BR",
+    "SOF.BR","SOLB.BR","UCB.BR","UMI.BR","WDP.BR","SYENS.BR",
+    # FTSE MIB Italie
+    "A2A.MI","AMP.MI","AZM.MI","BAMI.MI","BMPS.MI","BPE.MI","BC.MI","BZU.MI",
+    "CPR.MI","DIA.MI","ENEL.MI","ENI.MI","RACE.MI","FBK.MI","G.MI","HER.MI",
+    "ISP.MI","INW.MI","IG.MI","LDO.MI","MB.MI","MONC.MI","NEXI.MI","PST.MI",
+    "PRY.MI","REC.MI","SPM.MI","SRG.MI","TEN.MI","TIT.MI","TRN.MI","UCG.MI","UNI.MI",
+    # IBEX 35 Espagne
+    "ACS.MC","ACX.MC","AENA.MC","AMS.MC","ANA.MC","ANE.MC","BBVA.MC","BKT.MC",
+    "CABK.MC","CLNX.MC","ELE.MC","ENG.MC","FDR.MC","FER.MC","GRF.MC","IAG.MC",
+    "IBE.MC","IDR.MC","ITX.MC","LOG.MC","MAP.MC","MRL.MC","MTS.MC","NTGY.MC",
+    "PUIG.MC","RED.MC","REP.MC","ROVI.MC","SAB.MC","SAN.MC","SCYR.MC","TEF.MC",
+    # OMX Stockholm 30 Suède
+    "ALFA.ST","ASSA-B.ST","ATCO-A.ST","BOL.ST","EPI-A.ST","EQT.ST","ERIC-B.ST",
+    "ESSITY-B.ST","EVO.ST","SHB-A.ST","HM-B.ST","HEXA-B.ST","INDU-C.ST",
+    "INVE-B.ST","LIFCO-B.ST","NIBE-B.ST","NDA-SE.ST","SAAB-B.ST","SAND.ST",
+    "SCA-B.ST","SEB-A.ST","SKA-B.ST","SKF-B.ST","SWED-A.ST","TEL2-B.ST",
+    "TELIA.ST","VOLV-B.ST",
+    # OMX Copenhagen 25 Danemark
+    "MAERSK-A.CO","MAERSK-B.CO","AMBU-B.CO","CARL-B.CO","COLO-B.CO","DANSKE.CO",
+    "DEMANT.CO","DSV.CO","GMAB.CO","GN.CO","ISS.CO","NDA-DK.CO","NKT.CO",
+    "NOVO-B.CO","NSIS-B.CO","ORSTED.CO","PNDORA.CO","RBREW.CO","ROCK-B.CO",
+    "TRYG.CO","VWS.CO","ZEAL.CO",
+    # OMX Helsinki 25 Finlande
+    "ELISA.HE","FORTUM.HE","HUH1V.HE","KEMIRA.HE","KESKOB.HE","KNEBV.HE",
+    "KCR.HE","METSO.HE","NESTE.HE","NOKIA.HE","NDA-FI.HE","ORNBV.HE",
+    "OUT1V.HE","QTCOM.HE","SAMPO.HE","STERV.HE","TIETO.HE","UPM.HE",
+    "VALMT.HE","WRT1V.HE",
+    # PSI 20 Portugal
+    "ALTR.LS","BCP.LS","COR.LS","CTT.LS","EDP.LS","EDPR.LS","GALP.LS",
+    "JMT.LS","NOS.LS","RENE.LS","SEM.LS","SON.LS","NVG.LS",
+    # ATX Autriche
+    "ANDR.VI","ATS.VI","EBS.VI","EVN.VI","LNZ.VI","OMV.VI","OPT.VI",
+    "PAL.VI","RBI.VI","SBO.VI","STR.VI","UQA.VI","VER.VI","VIG.VI","VOE.VI","WIE.VI",
 ]
 
 
