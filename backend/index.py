@@ -97,7 +97,7 @@ def _make_token(user_id: int, email: str) -> str:
 
 
 def get_current_user() -> dict | None:
-    """Read Authorization: Bearer <token> header and return user dict or None."""
+    """Decode JWT and return user dict. Falls back to DB for groq_api_key etc."""
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         return None
@@ -105,14 +105,31 @@ def get_current_user() -> dict | None:
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = payload.get("user_id")
+        email = payload.get("email")
         if not user_id:
             return None
-        with get_db() as conn:
-            user = conn.execute(
-                "SELECT id, email, groq_api_key, default_sectors, default_min_score, created_at FROM users WHERE id = ?",
-                (user_id,)
-            ).fetchone()
-        return user
+        # Try DB lookup — if DB wiped (Vercel /tmp ephemeral), recreate user row
+        try:
+            with get_db() as conn:
+                user = conn.execute(
+                    "SELECT id, email, groq_api_key, default_sectors, default_min_score, created_at FROM users WHERE id = ?",
+                    (user_id,)
+                ).fetchone()
+                if not user:
+                    # Re-insert the user (password unknown, use placeholder)
+                    conn.execute(
+                        "INSERT OR IGNORE INTO users (id, email, password_hash) VALUES (?, ?, ?)",
+                        (user_id, email, "")
+                    )
+                    user = conn.execute(
+                        "SELECT id, email, groq_api_key, default_sectors, default_min_score, created_at FROM users WHERE id = ?",
+                        (user_id,)
+                    ).fetchone()
+            return user
+        except Exception:
+            # DB unavailable — return minimal user from token
+            return {"id": user_id, "email": email, "groq_api_key": None,
+                    "default_sectors": "[]", "default_min_score": 0, "created_at": ""}
     except Exception:
         return None
 
