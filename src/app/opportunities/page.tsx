@@ -14,16 +14,21 @@ const RED = "#c84848";
 const ORANGE = "#d4834a";
 
 const SECTORS: Record<string, string[]> = {
-  Defense: ["HO.PA", "SAF.PA", "TKO.PA"],
-  Aeronautique: ["AIR.PA", "SAF.PA", "AM.PA"],
-  Luxe: ["MC.PA", "KER.PA", "RMS.PA"],
-  Banque: ["BNP.PA", "GLE.PA", "ACA.PA"],
-  Energie: ["TTE.PA", "ENGI.PA"],
-  Technologie: ["CAP.PA", "DAS.PA", "STM.PA"],
-  Automobile: ["RNO.PA", "STL.PA"],
-  Sante: ["SAN.PA", "BN.PA"],
-  Telecom: ["ORA.PA"],
-  Industrie: ["SU.PA", "SGO.PA", "LR.PA"],
+  "Défense & Aéro": ["AIR.PA", "SAF.PA", "HO.PA", "AM.PA"],
+  "Luxe & Beauté": ["MC.PA", "KER.PA", "RMS.PA", "OR.PA"],
+  "Banque & Assurance": ["BNP.PA", "GLE.PA", "ACA.PA", "AXA.PA"],
+  "Énergie": ["TTE.PA", "ENGI.PA", "GTT.PA"],
+  "Technologie & IT": ["CAP.PA", "DSY.PA", "STM.PA", "ATO.PA", "ALTEN.PA"],
+  "Santé & Pharma": ["SAN.PA", "EL.PA", "IPH.PA", "ERF.PA", "GENFIT.PA", "DBV.PA"],
+  "Industrie": ["SU.PA", "SGO.PA", "LR.PA", "ALO.PA", "SEB.PA", "WLN.PA", "VIE.PA"],
+  "Automobile": ["RNO.PA", "STLAM.PA", "ML.PA", "FRVIA.PA"],
+  "Télécom": ["ORA.PA", "ILD.PA"],
+  "Distribution & Retail": ["CA.PA", "RXL.PA", "FNAC.PA"],
+  "Immobilier": ["URW.PA", "COV.PA", "ICAD.PA"],
+  "Matériaux": ["MT.PA", "VK.PA", "ERAMET.PA"],
+  "Médias & Loisirs": ["VIV.PA", "TF1.PA", "M6.PA", "LAGR.PA"],
+  "Agroalimentaire": ["BN.PA", "RI.PA", "BON.PA"],
+  "Transport": ["ADP.PA", "AF.PA", "GETLINK.PA"],
 };
 
 function scoreColor(score: number) {
