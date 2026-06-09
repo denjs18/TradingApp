@@ -46,3 +46,4 @@ npm-debug.log*
 
 # Vercel
 .vercel/
+.claude/worktrees/
