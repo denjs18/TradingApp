@@ -485,9 +485,71 @@ def dca_history():
 
 # ── Cron (remplace APScheduler) ───────────────────────────────
 
+ALL_PEA_TICKERS = [
+    # France — Défense & Aéro
+    "AIR.PA", "SAF.PA", "HO.PA", "AM.PA", "TEC.PA",
+    # France — Luxe & Beauté
+    "MC.PA", "KER.PA", "RMS.PA", "OR.PA", "PUB.PA",
+    # France — Banque & Assurance
+    "BNP.PA", "GLE.PA", "ACA.PA", "AXA.PA", "CNP.PA",
+    # France — Énergie
+    "TTE.PA", "ENGI.PA", "GTT.PA",
+    # France — Technologie & IT
+    "CAP.PA", "DSY.PA", "STM.PA", "ATO.PA", "ALTEN.PA", "OVH.PA",
+    # France — Santé & Pharma
+    "SAN.PA", "EL.PA", "IPH.PA", "ERF.PA", "GENFIT.PA",
+    # France — Industrie
+    "SU.PA", "SGO.PA", "LR.PA", "ALO.PA", "SEB.PA", "WLN.PA", "VIE.PA", "DG.PA", "AI.PA", "NK.PA",
+    # France — Automobile
+    "RNO.PA", "STLAM.PA", "ML.PA", "FRVIA.PA",
+    # France — Télécom
+    "ORA.PA", "ILD.PA",
+    # France — Distribution
+    "CA.PA", "RXL.PA", "FNAC.PA",
+    # France — Immobilier
+    "URW.PA", "COV.PA", "ICAD.PA", "LI.PA", "ALTAREA.PA",
+    # France — Matériaux
+    "MT.PA", "VK.PA", "ERAMET.PA",
+    # France — Médias
+    "VIV.PA", "TF1.PA", "M6.PA", "LAGR.PA",
+    # France — Agro & Boissons
+    "BN.PA", "RI.PA", "RCO.PA", "BON.PA",
+    # France — Transport & Infra
+    "ADP.PA", "AF.PA", "GETLINK.PA", "AC.PA",
+    # France — Divers
+    "EDEN.PA", "BOL.PA",
+    # Allemagne (Xetra)
+    "SIE.DE", "DTE.DE", "BAS.DE", "BAYN.DE", "MRK.DE", "RWE.DE", "EON.DE",
+    "BMW.DE", "VOW3.DE", "MBG.DE", "PAH3.DE",
+    "DBK.DE", "ALV.DE", "MUV2.DE", "CBK.DE",
+    "FRE.DE", "FME.DE", "SAP.DE",
+    "ADS.DE", "PUM.DE",
+    # Pays-Bas
+    "ASML.AS", "HEIA.AS", "INGA.AS", "PHIA.AS", "NN.AS", "WKL.AS", "RAND.AS", "ABN.AS",
+    # Belgique
+    "UCB.BR", "SOLB.BR", "ACKB.BR", "ABI.BR", "COLR.BR",
+    # Italie
+    "ENI.MI", "ENEL.MI", "ISP.MI", "UCG.MI", "LDO.MI", "RACE.MI", "G.MI",
+    # Espagne
+    "SAN.MC", "BBVA.MC", "ITX.MC", "IBE.MC", "REP.MC", "TEF.MC",
+    # Suède
+    "VOLV-B.ST", "ERIC-B.ST", "ATCO-A.ST", "SEB-A.ST", "SWED-A.ST", "SAND.ST",
+    # Danemark
+    "NOVO-B.CO", "MAERSK-B.CO", "DSV.CO", "COLO-B.CO", "CARL-B.CO",
+    # Finlande
+    "NOKIA.HE", "FORTUM.HE", "NESTE.HE", "UPM.HE",
+]
+
+
+@app.route("/api/opportunities/pea-tickers")
+def get_pea_tickers():
+    """Retourne la liste complète des tickers PEA disponibles."""
+    return jsonify(ALL_PEA_TICKERS)
+
+
 @app.route("/api/cron", methods=["GET", "POST"])
 def cron_cycle():
-    """Cycle de trading — appelé par Vercel Cron toutes les minutes."""
+    """Cycle de trading + pré-calcul des scores — appelé par Vercel Cron."""
     # Vérifier l'autorisation cron
     auth = request.headers.get("Authorization", "")
     cron_secret = os.environ.get("CRON_SECRET", "")

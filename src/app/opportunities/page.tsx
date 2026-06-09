@@ -13,22 +13,45 @@ const GREEN = "#3d9e6e";
 const RED = "#c84848";
 const ORANGE = "#d4834a";
 
+// SBF 120 + grandes caps européennes éligibles PEA (actions UE/EEE)
 const SECTORS: Record<string, string[]> = {
-  "Défense & Aéro": ["AIR.PA", "SAF.PA", "HO.PA", "AM.PA"],
-  "Luxe & Beauté": ["MC.PA", "KER.PA", "RMS.PA", "OR.PA"],
-  "Banque & Assurance": ["BNP.PA", "GLE.PA", "ACA.PA", "AXA.PA"],
-  "Énergie": ["TTE.PA", "ENGI.PA", "GTT.PA"],
-  "Technologie & IT": ["CAP.PA", "DSY.PA", "STM.PA", "ATO.PA", "ALTEN.PA"],
-  "Santé & Pharma": ["SAN.PA", "EL.PA", "IPH.PA", "ERF.PA", "GENFIT.PA", "DBV.PA"],
-  "Industrie": ["SU.PA", "SGO.PA", "LR.PA", "ALO.PA", "SEB.PA", "WLN.PA", "VIE.PA"],
-  "Automobile": ["RNO.PA", "STLAM.PA", "ML.PA", "FRVIA.PA"],
-  "Télécom": ["ORA.PA", "ILD.PA"],
-  "Distribution & Retail": ["CA.PA", "RXL.PA", "FNAC.PA"],
-  "Immobilier": ["URW.PA", "COV.PA", "ICAD.PA"],
-  "Matériaux": ["MT.PA", "VK.PA", "ERAMET.PA"],
-  "Médias & Loisirs": ["VIV.PA", "TF1.PA", "M6.PA", "LAGR.PA"],
-  "Agroalimentaire": ["BN.PA", "RI.PA", "BON.PA"],
-  "Transport": ["ADP.PA", "AF.PA", "GETLINK.PA"],
+  // ── FRANCE ──────────────────────────────────────────────────
+  "Défense & Aéro (FR)": ["AIR.PA", "SAF.PA", "HO.PA", "AM.PA", "TEC.PA"],
+  "Luxe & Beauté (FR)": ["MC.PA", "KER.PA", "RMS.PA", "OR.PA", "PUB.PA"],
+  "Banque & Assurance (FR)": ["BNP.PA", "GLE.PA", "ACA.PA", "AXA.PA", "CNP.PA"],
+  "Énergie (FR)": ["TTE.PA", "ENGI.PA", "GTT.PA"],
+  "Technologie & IT (FR)": ["CAP.PA", "DSY.PA", "STM.PA", "ATO.PA", "ALTEN.PA", "OVH.PA"],
+  "Santé & Pharma (FR)": ["SAN.PA", "EL.PA", "IPH.PA", "ERF.PA", "GENFIT.PA"],
+  "Industrie (FR)": ["SU.PA", "SGO.PA", "LR.PA", "ALO.PA", "SEB.PA", "WLN.PA", "VIE.PA", "DG.PA", "AI.PA", "NK.PA"],
+  "Automobile (FR)": ["RNO.PA", "STLAM.PA", "ML.PA", "FRVIA.PA"],
+  "Télécom (FR)": ["ORA.PA", "ILD.PA"],
+  "Distribution & Retail (FR)": ["CA.PA", "RXL.PA", "FNAC.PA"],
+  "Immobilier (FR)": ["URW.PA", "COV.PA", "ICAD.PA", "LI.PA", "ALTAREA.PA"],
+  "Matériaux (FR)": ["MT.PA", "VK.PA", "ERAMET.PA"],
+  "Médias & Loisirs (FR)": ["VIV.PA", "TF1.PA", "M6.PA", "LAGR.PA"],
+  "Agro & Boissons (FR)": ["BN.PA", "RI.PA", "RCO.PA", "BON.PA"],
+  "Transport & Infra (FR)": ["ADP.PA", "AF.PA", "GETLINK.PA", "AC.PA"],
+  "Divers (FR)": ["EDEN.PA", "BOL.PA"],
+  // ── ALLEMAGNE (Xetra) ────────────────────────────────────────
+  "Industrie (DE)": ["SIE.DE", "DTE.DE", "BAS.DE", "BAYN.DE", "MRK.DE", "RWE.DE", "EON.DE", "HNR1.DE"],
+  "Automobile (DE)": ["BMW.DE", "VOW3.DE", "MBG.DE", "PAH3.DE"],
+  "Finance (DE)": ["DBK.DE", "ALV.DE", "MUV2.DE", "CBK.DE"],
+  "Santé (DE)": ["FRE.DE", "FME.DE", "SAP.DE"],
+  "Luxe & Consommation (DE)": ["ADS.DE", "PUM.DE"],
+  // ── PAYS-BAS (Euronext Amsterdam) ───────────────────────────
+  "Pays-Bas": ["ASML.AS", "HEIA.AS", "INGA.AS", "PHIA.AS", "NN.AS", "WKL.AS", "RAND.AS", "ABN.AS", "AKZA.AS", "LIGHT.AS"],
+  // ── BELGIQUE ────────────────────────────────────────────────
+  "Belgique": ["UCB.BR", "SOLB.BR", "ACKB.BR", "ABI.BR", "COLR.BR"],
+  // ── ITALIE ──────────────────────────────────────────────────
+  "Italie": ["ENI.MI", "ENEL.MI", "ISP.MI", "UCG.MI", "LDO.MI", "RACE.MI", "G.MI"],
+  // ── ESPAGNE ─────────────────────────────────────────────────
+  "Espagne": ["SAN.MC", "BBVA.MC", "ITX.MC", "IBE.MC", "REP.MC", "TEF.MC"],
+  // ── SUÈDE ───────────────────────────────────────────────────
+  "Suède": ["VOLV-B.ST", "ERIC-B.ST", "ATCO-A.ST", "SEB-A.ST", "SWED-A.ST", "SAND.ST", "INVE-B.ST"],
+  // ── DANEMARK ────────────────────────────────────────────────
+  "Danemark": ["NOVO-B.CO", "MAERSK-B.CO", "DSV.CO", "COLO-B.CO", "CARL-B.CO"],
+  // ── FINLANDE ────────────────────────────────────────────────
+  "Finlande": ["NOKIA.HE", "FORTUM.HE", "NESTE.HE", "UPM.HE"],
 };
 
 function scoreColor(score: number) {
@@ -47,6 +70,62 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div className="section-title">{children}</div>;
 }
 
+function ProgressPanel({ progress }: { progress: { current: number; total: number; ticker: string; startedAt: number } }) {
+  const pct = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+  const elapsed = progress.startedAt ? (Date.now() - progress.startedAt) / 1000 : 0;
+  const rate = progress.current > 0 ? elapsed / progress.current : 0;
+  const remaining = rate > 0 ? Math.round(rate * (progress.total - progress.current)) : null;
+  const etaStr = remaining == null ? "—"
+    : remaining > 60 ? `~${Math.ceil(remaining / 60)} min`
+    : `~${remaining}s`;
+
+  return (
+    <div style={{
+      background: "var(--surface)",
+      border: "1px solid var(--border)",
+      borderRadius: 6,
+      padding: "1.25rem 1.5rem",
+      marginBottom: "1.5rem",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "0.6rem" }}>
+        <div>
+          <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-primary)", marginBottom: "0.2rem" }}>
+            Analyse en cours…
+          </div>
+          <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+            {progress.ticker ? `→ ${progress.ticker}` : "Démarrage…"}
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: "1.4rem", fontWeight: 700, color: GOLD, lineHeight: 1 }}>
+            {Math.round(pct)}%
+          </div>
+          <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
+            {progress.current}/{progress.total} tickers
+          </div>
+        </div>
+      </div>
+
+      {/* Barre principale */}
+      <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 4, height: 10, overflow: "hidden", marginBottom: "0.6rem" }}>
+        <div style={{
+          background: `linear-gradient(90deg, ${GOLD}, #e8c97a)`,
+          height: "100%",
+          width: `${pct}%`,
+          transition: "width 0.4s ease",
+          borderRadius: 4,
+          boxShadow: `0 0 8px rgba(201,168,76,0.5)`,
+        }} />
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", color: "var(--text-muted)" }}>
+        <span>Temps écoulé : {Math.round(elapsed)}s</span>
+        <span>Temps restant estimé : {etaStr}</span>
+      </div>
+    </div>
+  );
+}
+
 interface TickerDetail {
   ticker: string;
   chartData: OHLCVData | null;
@@ -60,7 +139,7 @@ export default function OpportunitiesPage() {
   const [minScore, setMinScore] = useState(0);
   const [results, setResults] = useState<OpportunityScore[]>([]);
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0, ticker: "" });
+  const [progress, setProgress] = useState({ current: 0, total: 0, ticker: "", startedAt: 0 });
   const [errors, setErrors] = useState<Array<{ ticker: string; error: string }>>([]);
   const [details, setDetails] = useState<Record<string, TickerDetail>>({});
   const [loadingCached, setLoadingCached] = useState(false);
@@ -86,13 +165,14 @@ export default function OpportunitiesPage() {
     if (!tickers.length) return;
     setLoading(true);
     setErrors([]);
-    setProgress({ current: 0, total: tickers.length, ticker: "" });
+    const startedAt = Date.now();
+    setProgress({ current: 0, total: tickers.length, ticker: "", startedAt });
 
     // Envoyer par lots de 3
     const allResults: OpportunityScore[] = [];
     for (let i = 0; i < tickers.length; i += 3) {
       const batch = tickers.slice(i, i + 3);
-      setProgress({ current: i, total: tickers.length, ticker: batch.join(", ") });
+      setProgress({ current: i, total: tickers.length, ticker: batch.join(", "), startedAt });
       try {
         const data = await analyzeOpportunities(batch) as { results: OpportunityScore[]; errors: any[] };
         allResults.push(...data.results);
@@ -104,7 +184,7 @@ export default function OpportunitiesPage() {
 
     allResults.sort((a, b) => b.score - a.score);
     setResults(allResults);
-    setProgress({ current: tickers.length, total: tickers.length, ticker: "" });
+    setProgress((p) => ({ ...p, current: tickers.length, ticker: "" }));
     setLoading(false);
   };
 
@@ -230,23 +310,7 @@ export default function OpportunitiesPage() {
         </div>
 
         {/* Progress */}
-        {loading && (
-          <div style={{ marginBottom: "1rem" }}>
-            <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginBottom: "0.3rem" }}>
-              Analyse de {progress.ticker}…
-            </div>
-            <div style={{ background: "var(--surface)", borderRadius: 2, height: 4, overflow: "hidden" }}>
-              <div
-                style={{
-                  background: GOLD,
-                  height: "100%",
-                  width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%`,
-                  transition: "width 0.3s",
-                }}
-              />
-            </div>
-          </div>
-        )}
+        {loading && <ProgressPanel progress={progress} />}
 
         {/* Errors */}
         {errors.length > 0 && (
