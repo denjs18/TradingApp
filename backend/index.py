@@ -3,8 +3,10 @@
 import sys
 import os
 
-# Assurer que le répertoire parent (racine du projet) est dans le path Python
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Racine du projet dans le path Python (backend/ est un niveau sous la racine)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+os.chdir(ROOT)
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS

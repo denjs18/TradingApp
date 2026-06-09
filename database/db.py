@@ -13,7 +13,12 @@ if USE_POSTGRES:
 else:
     from pathlib import Path
     BASE_DIR = Path(__file__).resolve().parent.parent
-    DB_PATH = BASE_DIR / "trading.db"
+    # Sur Vercel, le filesystem est read-only sauf /tmp
+    _default_path = BASE_DIR / "trading.db"
+    if os.environ.get("VERCEL") or not os.access(str(BASE_DIR), os.W_OK):
+        DB_PATH = Path("/tmp") / "trading.db"
+    else:
+        DB_PATH = _default_path
 
 
 def _adapt_sql(query: str) -> str:

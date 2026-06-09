@@ -5,7 +5,7 @@
       "use": "@vercel/next"
     },
     {
-      "src": "api/index.py",
+      "src": "backend/index.py",
       "use": "@vercel/python",
       "config": {
         "maxLambdaSize": "50mb"
@@ -15,7 +15,7 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/index.py"
+      "dest": "/backend/index.py"
     }
   ],
   "crons": [
@@ -23,8 +23,5 @@
       "path": "/api/cron",
       "schedule": "0 9 * * 1-5"
     }
-  ],
-  "env": {
-    "NEXT_PUBLIC_API_URL": ""
-  }
+  ]
 }
