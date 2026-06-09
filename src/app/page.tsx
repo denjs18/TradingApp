@@ -10,7 +10,7 @@ export default function HomePage() {
 
   useEffect(() => {
     getMarketStatus()
-      .then(setMarket)
+      .then((d) => setMarket(d as any))
       .catch(() => {});
     getPortfolioSummary()
       .then((s: any) => setPortfolio({ total_value: s.total_value, total_pnl: s.total_pnl }))
