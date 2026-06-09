@@ -77,6 +77,12 @@ export const analyzeOpportunities = (tickers: string[]) =>
 export const getOpportunityNews = (ticker: string) =>
   fetchJSON(`${BASE}/opportunities/news/${encodeURIComponent(ticker)}`);
 
+export const getAIAdvice = (results: any[]) =>
+  fetchJSON(`${BASE}/ai/advisor`, {
+    method: "POST",
+    body: JSON.stringify({ results }),
+  });
+
 // ── DCA ───────────────────────────────────────────────────────
 
 export const getDCASummary = () =>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import type { OpportunityScore, OHLCVData, NewsItem } from "@/lib/types";
-import { analyzeOpportunities, getOpportunityScores, getMarketHistory, getOpportunityNews } from "@/lib/api";
+import { analyzeOpportunities, getOpportunityScores, getMarketHistory, getOpportunityNews, getAIAdvice } from "@/lib/api";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
@@ -191,6 +191,8 @@ export default function OpportunitiesPage() {
   const [errors, setErrors] = useState<Array<{ ticker: string; error: string }>>([]);
   const [details, setDetails] = useState<Record<string, TickerDetail>>({});
   const [loadingCached, setLoadingCached] = useState(false);
+  const [aiAdvice, setAiAdvice] = useState<any>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const toggleSector = (sector: string) => {
     setSelectedSectors((prev) =>
@@ -234,6 +236,17 @@ export default function OpportunitiesPage() {
     setResults(allResults);
     setProgress((p) => ({ ...p, current: tickers.length, ticker: "" }));
     setLoading(false);
+
+    // Lancer l'analyse IA automatiquement
+    if (allResults.length > 0) {
+      setAiLoading(true);
+      setAiAdvice(null);
+      try {
+        const advice = await getAIAdvice(allResults);
+        setAiAdvice(advice);
+      } catch {}
+      setAiLoading(false);
+    }
   };
 
   const handleLoadCached = async () => {
@@ -423,6 +436,138 @@ export default function OpportunitiesPage() {
                   </div>
                 ))}
               </>
+            )}
+
+            {/* AI Advisor */}
+            {(aiLoading || aiAdvice) && (
+              <div style={{
+                background: "linear-gradient(135deg, rgba(201,168,76,0.07), rgba(201,168,76,0.03))",
+                border: "1px solid rgba(201,168,76,0.35)",
+                borderRadius: 8,
+                padding: "1.5rem",
+                marginBottom: "1.5rem",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+                  <span style={{ fontSize: "1.2rem" }}>🤖</span>
+                  <span style={{ color: GOLD, fontWeight: 700, fontSize: "0.95rem", letterSpacing: "0.04em" }}>
+                    Conseiller IA — Groq / Llama 3.3
+                  </span>
+                  {aiLoading && (
+                    <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginLeft: "auto" }}>
+                      Analyse en cours…
+                    </span>
+                  )}
+                </div>
+
+                {aiLoading && (
+                  <div style={{ display: "flex", gap: "0.3rem" }}>
+                    {[0,1,2].map(i => (
+                      <div key={i} style={{
+                        width: 6, height: 6, borderRadius: "50%", background: GOLD,
+                        animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                        opacity: 0.7,
+                      }} />
+                    ))}
+                  </div>
+                )}
+
+                {aiAdvice && !aiLoading && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                    {/* Synthèse */}
+                    {aiAdvice.synthese && (
+                      <p style={{ fontSize: "0.85rem", color: "var(--text-primary)", lineHeight: 1.6, margin: 0 }}>
+                        {aiAdvice.synthese}
+                      </p>
+                    )}
+
+                    {/* Top achats */}
+                    {aiAdvice.top_achats?.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: "0.5rem" }}>
+                          Meilleures opportunités
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                          {aiAdvice.top_achats.map((item: any) => (
+                            <div key={item.ticker} style={{
+                              background: "rgba(61,158,110,0.1)",
+                              border: "1px solid rgba(61,158,110,0.3)",
+                              borderRadius: 4,
+                              padding: "0.4rem 0.75rem",
+                              fontSize: "0.78rem",
+                            }}>
+                              <span style={{ color: GOLD, fontWeight: 700 }}>{item.ticker}</span>
+                              <span style={{
+                                marginLeft: "0.4rem", fontSize: "0.65rem",
+                                color: item.conviction === "haute" ? GREEN : item.conviction === "moyenne" ? ORANGE : "var(--text-muted)",
+                                fontWeight: 600, textTransform: "uppercase",
+                              }}>
+                                {item.conviction}
+                              </span>
+                              <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: "0.15rem" }}>
+                                {item.raison}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                      {/* Secteurs favoris */}
+                      {aiAdvice.secteurs_favoris?.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: "0.4rem" }}>
+                            Secteurs favoris
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem" }}>
+                            {aiAdvice.secteurs_favoris.map((s: string) => (
+                              <span key={s} style={{
+                                background: "rgba(201,168,76,0.12)",
+                                border: "1px solid rgba(201,168,76,0.25)",
+                                borderRadius: 3, padding: "0.2rem 0.5rem",
+                                fontSize: "0.72rem", color: GOLD,
+                              }}>{s}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Risques */}
+                      {aiAdvice.risques && (
+                        <div>
+                          <div style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: "0.4rem" }}>
+                            Risques
+                          </div>
+                          <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+                            {aiAdvice.risques}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Stratégie */}
+                    {aiAdvice.strategie_recommandee && (
+                      <div style={{
+                        background: "rgba(255,255,255,0.03)",
+                        borderRadius: 4,
+                        padding: "0.75rem 1rem",
+                        borderLeft: `3px solid ${GOLD}`,
+                      }}>
+                        <div style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: "0.4rem" }}>
+                          Stratégie recommandée
+                        </div>
+                        <p style={{ fontSize: "0.8rem", color: "var(--text-primary)", margin: 0, lineHeight: 1.6 }}>
+                          {aiAdvice.strategie_recommandee}
+                        </p>
+                      </div>
+                    )}
+
+                    <p style={{ fontSize: "0.62rem", color: "var(--text-muted)", margin: 0 }}>
+                      ⚠ Ces conseils sont générés par IA et ne constituent pas un conseil en investissement réglementé.
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Summary table */}

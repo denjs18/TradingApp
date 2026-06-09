@@ -343,6 +343,80 @@ def opportunity_news(ticker: str):
     return jsonify(serializable)
 
 
+# ── AI Advisor (Groq) ─────────────────────────────────────────
+
+@app.route("/api/ai/advisor", methods=["POST"])
+def ai_advisor():
+    """Analyse les résultats de scoring avec Groq et retourne des conseils."""
+    import requests as req
+
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        return jsonify({"error": "GROQ_API_KEY not configured"}), 503
+
+    data = request.get_json() or {}
+    results = data.get("results", [])
+    if not results:
+        return jsonify({"error": "no results"}), 400
+
+    # Préparer un résumé compact pour le prompt
+    top = sorted(results, key=lambda x: x.get("score", 0), reverse=True)[:15]
+    lines = []
+    for r in top:
+        lines.append(
+            f"- {r['ticker']} ({r.get('name','')}) : score {r.get('score',0):.1f}/10, "
+            f"recommandation={r.get('recommendation','')}, "
+            f"gain_potentiel={r.get('gain_pct') or 0:.1f}%, "
+            f"technique={r.get('technical_score',0):.2f}, "
+            f"fondamental={r.get('fundamental_score',0):.2f}, "
+            f"sentiment={r.get('sentiment_score',0):.2f}"
+        )
+    summary_text = "\n".join(lines)
+
+    prompt = f"""Tu es un conseiller en investissement PEA expérimenté. Voici les résultats d'une analyse multi-facteurs de {len(results)} actions européennes éligibles PEA.
+
+TOP 15 par score :
+{summary_text}
+
+Fournis une analyse structurée en JSON avec exactement ce format :
+{{
+  "synthese": "<3-4 phrases résumant les opportunités du moment>",
+  "top_achats": [
+    {{"ticker": "...", "raison": "<1 phrase>", "conviction": "haute|moyenne|faible"}}
+  ],
+  "secteurs_favoris": ["...", "..."],
+  "risques": "<2-3 phrases sur les risques actuels>",
+  "strategie_recommandee": "<1 paragraphe sur la stratégie PEA à adopter>"
+}}
+
+Réponds UNIQUEMENT avec le JSON, sans markdown ni texte autour."""
+
+    try:
+        resp = req.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "max_tokens": 1200,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        import json as _json
+        start = content.find("{")
+        end = content.rfind("}") + 1
+        if start >= 0 and end > start:
+            advice = _json.loads(content[start:end])
+        else:
+            advice = {"synthese": content, "top_achats": [], "secteurs_favoris": [], "risques": "", "strategie_recommandee": ""}
+        return jsonify(advice)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── DCA Advisor ───────────────────────────────────────────────
 
 @app.route("/api/dca/summary")
