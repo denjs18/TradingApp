@@ -314,43 +314,127 @@ export default function OpportunitiesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((opp) => (
-                    <tr key={opp.ticker}>
-                      <td style={{ color: GOLD, fontWeight: 600 }}>{opp.ticker}</td>
-                      <td style={{ fontSize: "0.72rem" }}>{opp.name || "—"}</td>
-                      <td>
-                        <span style={{ color: scoreColor(opp.score), fontWeight: 600 }}>
-                          {opp.score.toFixed(1)}
-                        </span>
-                        <span style={{ color: "var(--text-muted)", fontSize: "0.65rem" }}>/10</span>
-                      </td>
-                      <td style={{ fontSize: "0.72rem" }}>
-                        {recEmoji(opp.recommendation)} {opp.recommendation.toUpperCase()}
-                      </td>
-                      <td>{opp.current_price ? opp.current_price.toFixed(2) : "—"}</td>
-                      <td>{opp.target_price ? opp.target_price.toFixed(2) : "—"}</td>
-                      <td style={{ color: opp.gain_pct != null && opp.gain_pct > 0 ? GREEN : "var(--text-secondary)" }}>
-                        {opp.gain_pct != null ? `${opp.gain_pct > 0 ? "+" : ""}${opp.gain_pct.toFixed(1)}%` : "—"}
-                      </td>
-                      <td style={{ color: opp.technical_score > 0 ? GREEN : opp.technical_score < 0 ? RED : "var(--text-secondary)" }}>
-                        {opp.technical_score > 0 ? "+" : ""}{opp.technical_score.toFixed(2)}
-                      </td>
-                      <td style={{ color: opp.fundamental_score > 0 ? GREEN : opp.fundamental_score < 0 ? RED : "var(--text-secondary)" }}>
-                        {opp.fundamental_score > 0 ? "+" : ""}{opp.fundamental_score.toFixed(2)}
-                      </td>
-                      <td style={{ color: opp.sentiment_score > 0 ? GREEN : opp.sentiment_score < 0 ? RED : "var(--text-secondary)" }}>
-                        {opp.sentiment_score > 0 ? "+" : ""}{opp.sentiment_score.toFixed(2)}
-                      </td>
-                      <td>
-                        <button
-                          style={{ fontSize: "0.65rem", color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
-                          onClick={() => toggleDetail(opp)}
-                        >
-                          {details[opp.ticker]?.open ? "Fermer" : "Détails"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {filtered.map((opp) => {
+                    const det = details[opp.ticker];
+                    return (
+                      <>
+                        <tr key={opp.ticker}>
+                          <td style={{ color: GOLD, fontWeight: 600 }}>{opp.ticker}</td>
+                          <td style={{ fontSize: "0.72rem" }}>{opp.name || "—"}</td>
+                          <td>
+                            <span style={{ color: scoreColor(opp.score), fontWeight: 600 }}>
+                              {opp.score.toFixed(1)}
+                            </span>
+                            <span style={{ color: "var(--text-muted)", fontSize: "0.65rem" }}>/10</span>
+                          </td>
+                          <td style={{ fontSize: "0.72rem" }}>
+                            {recEmoji(opp.recommendation)} {opp.recommendation.toUpperCase()}
+                          </td>
+                          <td>{opp.current_price ? opp.current_price.toFixed(2) : "—"}</td>
+                          <td>{opp.target_price ? opp.target_price.toFixed(2) : "—"}</td>
+                          <td style={{ color: opp.gain_pct != null && opp.gain_pct > 0 ? GREEN : "var(--text-secondary)" }}>
+                            {opp.gain_pct != null ? `${opp.gain_pct > 0 ? "+" : ""}${opp.gain_pct.toFixed(1)}%` : "—"}
+                          </td>
+                          <td style={{ color: opp.technical_score > 0 ? GREEN : opp.technical_score < 0 ? RED : "var(--text-secondary)" }}>
+                            {opp.technical_score > 0 ? "+" : ""}{opp.technical_score.toFixed(2)}
+                          </td>
+                          <td style={{ color: opp.fundamental_score > 0 ? GREEN : opp.fundamental_score < 0 ? RED : "var(--text-secondary)" }}>
+                            {opp.fundamental_score > 0 ? "+" : ""}{opp.fundamental_score.toFixed(2)}
+                          </td>
+                          <td style={{ color: opp.sentiment_score > 0 ? GREEN : opp.sentiment_score < 0 ? RED : "var(--text-secondary)" }}>
+                            {opp.sentiment_score > 0 ? "+" : ""}{opp.sentiment_score.toFixed(2)}
+                          </td>
+                          <td>
+                            <button
+                              style={{ fontSize: "0.65rem", color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
+                              onClick={() => toggleDetail(opp)}
+                            >
+                              {det?.open ? "Fermer" : "Détails"}
+                            </button>
+                          </td>
+                        </tr>
+                        {det?.open && (
+                          <tr key={`${opp.ticker}-detail`}>
+                            <td colSpan={11} style={{ padding: "1rem", background: "rgba(201,168,76,0.04)", borderTop: "1px solid var(--border)" }}>
+                              {/* Scores */}
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "0.75rem", marginBottom: "1rem" }}>
+                                {[
+                                  { label: "Score global", val: opp.score, suffix: "/10" },
+                                  { label: "Cours actuel", val: opp.current_price, suffix: " €" },
+                                  { label: "Objectif", val: opp.target_price, suffix: " €" },
+                                  { label: "Gain potentiel", val: opp.gain_pct, suffix: "%" },
+                                ].map(({ label, val, suffix }) => (
+                                  <div key={label} className="metric-card">
+                                    <div className="metric-label">{label}</div>
+                                    <div className="metric-value" style={{ color: val != null && val > 0 ? GREEN : "var(--text-primary)" }}>
+                                      {val != null ? `${val > 0 && suffix !== "/10" ? "+" : ""}${typeof val === "number" ? val.toFixed(label === "Gain potentiel" ? 1 : 2) : val}${suffix}` : "—"}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              {opp.justification && (
+                                <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", marginBottom: "1rem" }}>
+                                  <span style={{ color: "var(--text-muted)" }}>Justification</span> — {opp.justification}
+                                </p>
+                              )}
+                              {/* Chart */}
+                              {det.chartData && (
+                                <div className="chart-container" style={{ marginBottom: "1rem" }}>
+                                  <Plot
+                                    data={[
+                                      {
+                                        type: "candlestick",
+                                        x: det.chartData.dates,
+                                        open: det.chartData.open,
+                                        high: det.chartData.high,
+                                        low: det.chartData.low,
+                                        close: det.chartData.close,
+                                        name: opp.ticker,
+                                        increasing: { line: { color: GREEN } },
+                                        decreasing: { line: { color: RED } },
+                                      },
+                                      ...(det.chartData.SMA_20 ? [{
+                                        type: "scatter" as const,
+                                        x: det.chartData.dates, y: det.chartData.SMA_20,
+                                        name: "SMA 20", line: { color: GOLD, width: 1 },
+                                      }] : []),
+                                      ...(det.chartData.SMA_50 ? [{
+                                        type: "scatter" as const,
+                                        x: det.chartData.dates, y: det.chartData.SMA_50,
+                                        name: "SMA 50", line: { color: "rgba(201,168,76,0.45)", width: 1 },
+                                      }] : []),
+                                    ]}
+                                    layout={{
+                                      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+                                      height: 300, margin: { l: 40, r: 20, t: 10, b: 30 },
+                                      xaxis: { gridcolor: "rgba(201,168,76,0.06)", tickfont: { color: "var(--text-muted)", size: 10 }, rangeslider: { visible: false } },
+                                      yaxis: { gridcolor: "rgba(201,168,76,0.06)", tickfont: { color: "var(--text-muted)", size: 10 }, side: "right" },
+                                      legend: { font: { color: "var(--text-secondary)", size: 10 }, bgcolor: "rgba(0,0,0,0)" },
+                                    }}
+                                    config={{ displayModeBar: false, responsive: true }}
+                                    style={{ width: "100%" }}
+                                  />
+                                </div>
+                              )}
+                              {/* News */}
+                              {det.news.length > 0 && (
+                                <div>
+                                  <p style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", margin: "0 0 0.5rem" }}>Actualités</p>
+                                  {det.news.map((item, i) => (
+                                    <p key={i} style={{ fontSize: "0.78rem", margin: "0.2rem 0" }}>
+                                      {item.published && <span style={{ color: "var(--text-muted)" }}>{item.published} — </span>}
+                                      <a href={item.link} target="_blank" rel="noreferrer" style={{ color: GOLD, textDecoration: "none" }}>{item.title}</a>
+                                      <span style={{ color: "var(--text-muted)" }}> · {item.source}</span>
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
