@@ -4,6 +4,17 @@ import yfinance as yf
 from typing import Optional
 
 
+def _num(val) -> Optional[float]:
+    """Convertit une valeur en float, retourne None si impossible."""
+    if val is None:
+        return None
+    try:
+        f = float(val)
+        return f if f == f else None  # rejette NaN
+    except (TypeError, ValueError):
+        return None
+
+
 def get_fundamental_data(ticker: str) -> dict:
     """Recupere les donnees fondamentales d'une action.
 
@@ -40,27 +51,27 @@ def get_fundamental_data(ticker: str) -> dict:
 
     try:
         info = stock.info
-        data["pe_ratio"] = info.get("trailingPE")
-        data["forward_pe"] = info.get("forwardPE")
-        data["peg_ratio"] = info.get("pegRatio")
-        data["price_to_book"] = info.get("priceToBook")
-        data["dividend_yield"] = info.get("dividendYield")
-        data["dividend_rate"] = info.get("dividendRate")
-        data["payout_ratio"] = info.get("payoutRatio")
-        data["revenue_growth"] = info.get("revenueGrowth")
-        data["earnings_growth"] = info.get("earningsGrowth")
-        data["profit_margin"] = info.get("profitMargins")
-        data["operating_margin"] = info.get("operatingMargins")
-        data["gross_margin"] = info.get("grossMargins")
-        data["debt_to_equity"] = info.get("debtToEquity")
-        data["current_ratio"] = info.get("currentRatio")
-        data["return_on_equity"] = info.get("returnOnEquity")
-        data["return_on_assets"] = info.get("returnOnAssets")
-        data["market_cap"] = info.get("marketCap")
-        data["enterprise_value"] = info.get("enterpriseValue")
-        data["ev_to_ebitda"] = info.get("enterpriseToEbitda")
-        data["free_cash_flow"] = info.get("freeCashflow")
-        data["beta"] = info.get("beta")
+        data["pe_ratio"] = _num(info.get("trailingPE"))
+        data["forward_pe"] = _num(info.get("forwardPE"))
+        data["peg_ratio"] = _num(info.get("pegRatio"))
+        data["price_to_book"] = _num(info.get("priceToBook"))
+        data["dividend_yield"] = _num(info.get("dividendYield"))
+        data["dividend_rate"] = _num(info.get("dividendRate"))
+        data["payout_ratio"] = _num(info.get("payoutRatio"))
+        data["revenue_growth"] = _num(info.get("revenueGrowth"))
+        data["earnings_growth"] = _num(info.get("earningsGrowth"))
+        data["profit_margin"] = _num(info.get("profitMargins"))
+        data["operating_margin"] = _num(info.get("operatingMargins"))
+        data["gross_margin"] = _num(info.get("grossMargins"))
+        data["debt_to_equity"] = _num(info.get("debtToEquity"))
+        data["current_ratio"] = _num(info.get("currentRatio"))
+        data["return_on_equity"] = _num(info.get("returnOnEquity"))
+        data["return_on_assets"] = _num(info.get("returnOnAssets"))
+        data["market_cap"] = _num(info.get("marketCap"))
+        data["enterprise_value"] = _num(info.get("enterpriseValue"))
+        data["ev_to_ebitda"] = _num(info.get("enterpriseToEbitda"))
+        data["free_cash_flow"] = _num(info.get("freeCashflow"))
+        data["beta"] = _num(info.get("beta"))
         data["sector"] = info.get("sector")
         data["industry"] = info.get("industry")
         data["name"] = info.get("longName") or info.get("shortName")
@@ -71,61 +82,42 @@ def get_fundamental_data(ticker: str) -> dict:
 
 
 def score_valuation(fundamentals: dict) -> dict:
-    """Score la valorisation de l'action.
-
-    Returns:
-        dict avec score (-1 a +1), detail et interpretation.
-    """
+    """Score la valorisation de l'action."""
     scores = []
     details = []
 
-    # P/E ratio
-    pe = fundamentals.get("pe_ratio")
+    pe = _num(fundamentals.get("pe_ratio"))
     if pe is not None and pe > 0:
         if pe < 10:
-            scores.append(1.0)
-            details.append(f"P/E bas ({pe:.1f}) - potentiellement sous-evalue")
+            scores.append(1.0); details.append(f"P/E bas ({pe:.1f}) - potentiellement sous-evalue")
         elif pe < 15:
-            scores.append(0.5)
-            details.append(f"P/E raisonnable ({pe:.1f})")
+            scores.append(0.5); details.append(f"P/E raisonnable ({pe:.1f})")
         elif pe < 25:
-            scores.append(0.0)
-            details.append(f"P/E moyen ({pe:.1f})")
+            scores.append(0.0); details.append(f"P/E moyen ({pe:.1f})")
         elif pe < 40:
-            scores.append(-0.5)
-            details.append(f"P/E eleve ({pe:.1f}) - potentiellement surevalue")
+            scores.append(-0.5); details.append(f"P/E eleve ({pe:.1f}) - potentiellement surevalue")
         else:
-            scores.append(-1.0)
-            details.append(f"P/E tres eleve ({pe:.1f}) - attention a la valorisation")
+            scores.append(-1.0); details.append(f"P/E tres eleve ({pe:.1f}) - attention a la valorisation")
 
-    # PEG ratio
-    peg = fundamentals.get("peg_ratio")
+    peg = _num(fundamentals.get("peg_ratio"))
     if peg is not None and peg > 0:
         if peg < 1:
-            scores.append(0.8)
-            details.append(f"PEG < 1 ({peg:.2f}) - croissance sous-evaluee")
+            scores.append(0.8); details.append(f"PEG < 1 ({peg:.2f}) - croissance sous-evaluee")
         elif peg < 1.5:
-            scores.append(0.3)
-            details.append(f"PEG correct ({peg:.2f})")
+            scores.append(0.3); details.append(f"PEG correct ({peg:.2f})")
         elif peg < 2:
-            scores.append(0.0)
-            details.append(f"PEG moyen ({peg:.2f})")
+            scores.append(0.0); details.append(f"PEG moyen ({peg:.2f})")
         else:
-            scores.append(-0.5)
-            details.append(f"PEG eleve ({peg:.2f}) - croissance surevaluee")
+            scores.append(-0.5); details.append(f"PEG eleve ({peg:.2f}) - croissance surevaluee")
 
-    # Price to Book
-    ptb = fundamentals.get("price_to_book")
+    ptb = _num(fundamentals.get("price_to_book"))
     if ptb is not None and ptb > 0:
         if ptb < 1:
-            scores.append(0.7)
-            details.append(f"P/B < 1 ({ptb:.2f}) - sous la valeur comptable")
+            scores.append(0.7); details.append(f"P/B < 1 ({ptb:.2f}) - sous la valeur comptable")
         elif ptb < 3:
-            scores.append(0.2)
-            details.append(f"P/B raisonnable ({ptb:.2f})")
+            scores.append(0.2); details.append(f"P/B raisonnable ({ptb:.2f})")
         else:
-            scores.append(-0.3)
-            details.append(f"P/B eleve ({ptb:.2f})")
+            scores.append(-0.3); details.append(f"P/B eleve ({ptb:.2f})")
 
     overall = sum(scores) / len(scores) if scores else 0.0
     return {"score": overall, "details": details}
@@ -136,40 +128,29 @@ def score_profitability(fundamentals: dict) -> dict:
     scores = []
     details = []
 
-    # Marge nette
-    pm = fundamentals.get("profit_margin")
+    pm = _num(fundamentals.get("profit_margin"))
     if pm is not None:
         if pm > 0.20:
-            scores.append(1.0)
-            details.append(f"Marge nette excellente ({pm:.1%})")
+            scores.append(1.0); details.append(f"Marge nette excellente ({pm:.1%})")
         elif pm > 0.10:
-            scores.append(0.5)
-            details.append(f"Bonne marge nette ({pm:.1%})")
+            scores.append(0.5); details.append(f"Bonne marge nette ({pm:.1%})")
         elif pm > 0.05:
-            scores.append(0.0)
-            details.append(f"Marge nette correcte ({pm:.1%})")
+            scores.append(0.0); details.append(f"Marge nette correcte ({pm:.1%})")
         elif pm > 0:
-            scores.append(-0.3)
-            details.append(f"Marge nette faible ({pm:.1%})")
+            scores.append(-0.3); details.append(f"Marge nette faible ({pm:.1%})")
         else:
-            scores.append(-1.0)
-            details.append(f"Marge nette negative ({pm:.1%})")
+            scores.append(-1.0); details.append(f"Marge nette negative ({pm:.1%})")
 
-    # ROE
-    roe = fundamentals.get("return_on_equity")
+    roe = _num(fundamentals.get("return_on_equity"))
     if roe is not None:
         if roe > 0.20:
-            scores.append(0.8)
-            details.append(f"ROE eleve ({roe:.1%})")
+            scores.append(0.8); details.append(f"ROE eleve ({roe:.1%})")
         elif roe > 0.10:
-            scores.append(0.4)
-            details.append(f"ROE correct ({roe:.1%})")
+            scores.append(0.4); details.append(f"ROE correct ({roe:.1%})")
         elif roe > 0:
-            scores.append(0.0)
-            details.append(f"ROE faible ({roe:.1%})")
+            scores.append(0.0); details.append(f"ROE faible ({roe:.1%})")
         else:
-            scores.append(-0.7)
-            details.append(f"ROE negatif ({roe:.1%})")
+            scores.append(-0.7); details.append(f"ROE negatif ({roe:.1%})")
 
     overall = sum(scores) / len(scores) if scores else 0.0
     return {"score": overall, "details": details}
@@ -180,37 +161,27 @@ def score_growth(fundamentals: dict) -> dict:
     scores = []
     details = []
 
-    # Croissance du CA
-    rg = fundamentals.get("revenue_growth")
+    rg = _num(fundamentals.get("revenue_growth"))
     if rg is not None:
         if rg > 0.20:
-            scores.append(1.0)
-            details.append(f"Croissance CA forte ({rg:.1%})")
+            scores.append(1.0); details.append(f"Croissance CA forte ({rg:.1%})")
         elif rg > 0.10:
-            scores.append(0.6)
-            details.append(f"Bonne croissance CA ({rg:.1%})")
+            scores.append(0.6); details.append(f"Bonne croissance CA ({rg:.1%})")
         elif rg > 0:
-            scores.append(0.2)
-            details.append(f"Croissance CA faible ({rg:.1%})")
+            scores.append(0.2); details.append(f"Croissance CA faible ({rg:.1%})")
         else:
-            scores.append(-0.5)
-            details.append(f"CA en baisse ({rg:.1%})")
+            scores.append(-0.5); details.append(f"CA en baisse ({rg:.1%})")
 
-    # Croissance des benefices
-    eg = fundamentals.get("earnings_growth")
+    eg = _num(fundamentals.get("earnings_growth"))
     if eg is not None:
         if eg > 0.20:
-            scores.append(1.0)
-            details.append(f"Croissance benefices forte ({eg:.1%})")
+            scores.append(1.0); details.append(f"Croissance benefices forte ({eg:.1%})")
         elif eg > 0.10:
-            scores.append(0.5)
-            details.append(f"Bonne croissance benefices ({eg:.1%})")
+            scores.append(0.5); details.append(f"Bonne croissance benefices ({eg:.1%})")
         elif eg > 0:
-            scores.append(0.1)
-            details.append(f"Croissance benefices faible ({eg:.1%})")
+            scores.append(0.1); details.append(f"Croissance benefices faible ({eg:.1%})")
         else:
-            scores.append(-0.6)
-            details.append(f"Benefices en baisse ({eg:.1%})")
+            scores.append(-0.6); details.append(f"Benefices en baisse ({eg:.1%})")
 
     overall = sum(scores) / len(scores) if scores else 0.0
     return {"score": overall, "details": details}
@@ -221,34 +192,25 @@ def score_financial_health(fundamentals: dict) -> dict:
     scores = []
     details = []
 
-    # Dette / Capitaux propres
-    dte = fundamentals.get("debt_to_equity")
+    dte = _num(fundamentals.get("debt_to_equity"))
     if dte is not None:
         if dte < 30:
-            scores.append(0.8)
-            details.append(f"Faible endettement (D/E: {dte:.0f}%)")
+            scores.append(0.8); details.append(f"Faible endettement (D/E: {dte:.0f}%)")
         elif dte < 80:
-            scores.append(0.3)
-            details.append(f"Endettement modere (D/E: {dte:.0f}%)")
+            scores.append(0.3); details.append(f"Endettement modere (D/E: {dte:.0f}%)")
         elif dte < 150:
-            scores.append(-0.2)
-            details.append(f"Endettement eleve (D/E: {dte:.0f}%)")
+            scores.append(-0.2); details.append(f"Endettement eleve (D/E: {dte:.0f}%)")
         else:
-            scores.append(-0.8)
-            details.append(f"Endettement tres eleve (D/E: {dte:.0f}%)")
+            scores.append(-0.8); details.append(f"Endettement tres eleve (D/E: {dte:.0f}%)")
 
-    # Current ratio
-    cr = fundamentals.get("current_ratio")
+    cr = _num(fundamentals.get("current_ratio"))
     if cr is not None:
         if cr > 2:
-            scores.append(0.6)
-            details.append(f"Bonne liquidite (CR: {cr:.2f})")
+            scores.append(0.6); details.append(f"Bonne liquidite (CR: {cr:.2f})")
         elif cr > 1:
-            scores.append(0.2)
-            details.append(f"Liquidite correcte (CR: {cr:.2f})")
+            scores.append(0.2); details.append(f"Liquidite correcte (CR: {cr:.2f})")
         else:
-            scores.append(-0.6)
-            details.append(f"Liquidite insuffisante (CR: {cr:.2f})")
+            scores.append(-0.6); details.append(f"Liquidite insuffisante (CR: {cr:.2f})")
 
     overall = sum(scores) / len(scores) if scores else 0.0
     return {"score": overall, "details": details}
