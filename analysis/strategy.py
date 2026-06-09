@@ -338,6 +338,41 @@ def compute_opportunity_score(ticker: str) -> dict:
     if analyst.get("recommendation"):
         justification_parts.append(f"Consensus analystes: {analyst['recommendation']}")
 
+    # Métriques de risque depuis l'historique
+    volatility_annual = None
+    max_drawdown = None
+    sharpe_ratio = None
+    risk_level = "inconnu"
+
+    if not df.empty and len(df) > 5:
+        import numpy as np
+        returns = df["Close"].pct_change().dropna()
+        if len(returns) > 0:
+            vol_daily = float(returns.std())
+            volatility_annual = round(vol_daily * (252 ** 0.5) * 100, 1)  # en %
+
+            # Max drawdown sur la période
+            cumulative = (1 + returns).cumprod()
+            rolling_max = cumulative.cummax()
+            drawdowns = (cumulative - rolling_max) / rolling_max
+            max_drawdown = round(float(drawdowns.min()) * 100, 1)  # en % (négatif)
+
+            # Sharpe approximatif (rf = 3% annuel)
+            rf_daily = 0.03 / 252
+            excess = returns - rf_daily
+            if float(returns.std()) > 0:
+                sharpe_ratio = round(float(excess.mean()) / float(returns.std()) * (252 ** 0.5), 2)
+
+        if volatility_annual is not None:
+            if volatility_annual < 15:
+                risk_level = "faible"
+            elif volatility_annual < 30:
+                risk_level = "modéré"
+            elif volatility_annual < 50:
+                risk_level = "élevé"
+            else:
+                risk_level = "très élevé"
+
     return {
         "ticker": ticker,
         "name": fund.get("name", ticker),
@@ -354,6 +389,12 @@ def compute_opportunity_score(ticker: str) -> dict:
         "stop_price": stop_price,
         "gain_pct": round(gain_pct, 1) if gain_pct else None,
         "risk_pct": round(risk_pct, 1) if risk_pct else None,
+        "volatility_annual": volatility_annual,
+        "max_drawdown": max_drawdown,
+        "sharpe_ratio": sharpe_ratio,
+        "risk_level": risk_level,
+        "beta": fund.get("fundamentals", {}).get("beta"),
+        "dividend_yield": fund.get("fundamentals", {}).get("dividend_yield"),
         "trend": tech["trend"],
         "justification": " | ".join(justification_parts),
         "details": {

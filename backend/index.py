@@ -345,6 +345,102 @@ def opportunity_news(ticker: str):
 
 # ── AI Advisor (Groq) ─────────────────────────────────────────
 
+@app.route("/api/ai/ticker", methods=["POST"])
+def ai_ticker_analysis():
+    """Analyse approfondie d'un ticker avec horizons temporels et profils investisseurs."""
+    import requests as req
+
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        return jsonify({"error": "GROQ_API_KEY not configured"}), 503
+
+    data = request.get_json() or {}
+    opp = data.get("opportunity", {})
+    if not opp:
+        return jsonify({"error": "no opportunity data"}), 400
+
+    fund = opp.get("details", {}).get("fundamental", {})
+    fundamentals = fund.get("fundamentals", {})
+
+    prompt = f"""Tu es un analyste financier senior. Voici les données complètes sur {opp.get('ticker')} ({opp.get('name', '')}), secteur: {opp.get('sector', '')}.
+
+DONNÉES TECHNIQUES:
+- Cours actuel: {opp.get('current_price')} €
+- Objectif analysts: {opp.get('target_price')} € (gain potentiel: {opp.get('gain_pct')}%)
+- Stop suggéré: {opp.get('stop_price')} €
+- Tendance: {opp.get('trend')}
+- Volatilité annuelle: {opp.get('volatility_annual')}%
+- Max drawdown (6 mois): {opp.get('max_drawdown')}%
+- Sharpe ratio: {opp.get('sharpe_ratio')}
+- Niveau de risque: {opp.get('risk_level')}
+- Score global: {opp.get('score')}/10 ({opp.get('recommendation')})
+- Score technique: {opp.get('technical_score')}, fondamental: {opp.get('fundamental_score')}, sentiment: {opp.get('sentiment_score')}
+
+DONNÉES FONDAMENTALES:
+- P/E: {fundamentals.get('pe_ratio')}, PEG: {fundamentals.get('peg_ratio')}, P/B: {fundamentals.get('price_to_book')}
+- Marge nette: {fundamentals.get('profit_margin')}, ROE: {fundamentals.get('return_on_equity')}
+- Croissance CA: {fundamentals.get('revenue_growth')}, Croissance BPA: {fundamentals.get('earnings_growth')}
+- Dette/Capitaux propres: {fundamentals.get('debt_to_equity')}
+- Dividende: {fundamentals.get('dividend_yield')} (rendement)
+- Beta: {fundamentals.get('beta')}
+- Capitalisation: {fundamentals.get('market_cap')}
+
+Génère une analyse structurée en JSON:
+{{
+  "synthese": "<2-3 phrases résumant la situation actuelle>",
+  "horizons": {{
+    "1an": {{"outlook": "haussier|neutre|baissier", "potentiel": "<fourchette de prix estimée>", "catalyseurs": "<1-2 facteurs clés>"}},
+    "3ans": {{"outlook": "haussier|neutre|baissier", "potentiel": "<fourchette>", "catalyseurs": "<facteurs>"}},
+    "5ans": {{"outlook": "haussier|neutre|baissier", "potentiel": "<fourchette>", "catalyseurs": "<facteurs>"}},
+    "10ans": {{"outlook": "haussier|neutre|baissier", "potentiel": "<fourchette>", "catalyseurs": "<facteurs>"}}
+  }},
+  "profil_dca": {{
+    "adapte": true/false,
+    "score_dca": <0-10>,
+    "frequence_recommandee": "mensuelle|trimestrielle|annuelle",
+    "zone_accumulation": "<fourchette de prix idéale pour DCA>",
+    "raison": "<2-3 phrases expliquant pourquoi le DCA est adapté ou non>"
+  }},
+  "profil_swing": {{
+    "adapte": true/false,
+    "score_swing": <0-10>,
+    "entree_ideale": "<prix ou condition d'entrée>",
+    "objectif_court_terme": "<prix cible à 3-6 mois>",
+    "stop_loss": "<niveau de stop recommandé>",
+    "ratio_risque_rendement": "<ex: 1:3>",
+    "raison": "<2-3 phrases>"
+  }},
+  "risques_principaux": ["<risque 1>", "<risque 2>", "<risque 3>"],
+  "catalyseurs_positifs": ["<catalyseur 1>", "<catalyseur 2>"],
+  "verdict_final": "<1 paragraphe de conclusion avec recommandation claire>"
+}}
+
+Réponds UNIQUEMENT avec le JSON valide."""
+
+    try:
+        resp = req.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.25,
+                "max_tokens": 1800,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        import json as _json
+        start = content.find("{")
+        end = content.rfind("}") + 1
+        if start >= 0 and end > start:
+            return jsonify(_json.loads(content[start:end]))
+        return jsonify({"verdict_final": content})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/ai/advisor", methods=["POST"])
 def ai_advisor():
     """Analyse les résultats de scoring avec Groq et retourne des conseils."""
