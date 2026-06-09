@@ -658,11 +658,116 @@ export default function OpportunitiesPage() {
                                   </div>
                                 ))}
                               </div>
+                              {/* Métriques de risque */}
+                              {((opp as any).volatility_annual != null || (opp as any).max_drawdown != null) && (
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "0.5rem", marginBottom: "1rem" }}>
+                                  {[
+                                    { label: "Volatilité/an", val: `${(opp as any).volatility_annual}%`, warn: (opp as any).volatility_annual > 30 },
+                                    { label: "Max drawdown", val: `${(opp as any).max_drawdown}%`, warn: true },
+                                    { label: "Sharpe ratio", val: `${(opp as any).sharpe_ratio ?? "—"}`, warn: false },
+                                    { label: "Niveau risque", val: (opp as any).risk_level || "—", warn: ["élevé","très élevé"].includes((opp as any).risk_level) },
+                                  ].map(({ label, val, warn }) => (
+                                    <div key={label} className="metric-card">
+                                      <div className="metric-label">{label}</div>
+                                      <div className="metric-value" style={{ color: warn ? RED : "var(--text-primary)", fontSize: "0.85rem" }}>{val}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
                               {opp.justification && (
                                 <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", marginBottom: "1rem" }}>
                                   <span style={{ color: "var(--text-muted)" }}>Justification</span> — {opp.justification}
                                 </p>
                               )}
+
+                              {/* Analyse IA Groq */}
+                              {(det.aiLoading || det.aiAnalysis) && (
+                                <div style={{ background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.25)", borderRadius: 6, padding: "1rem 1.25rem", marginBottom: "1rem" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.6rem" }}>
+                                    <span>🤖</span>
+                                    <span style={{ color: GOLD, fontWeight: 600, fontSize: "0.8rem" }}>Analyse IA approfondie — Groq / Llama 3.3</span>
+                                    {det.aiLoading && <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginLeft: "auto" }}>Chargement…</span>}
+                                  </div>
+                                  {det.aiLoading && <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Analyse en cours (~3s)…</div>}
+                                  {det.aiAnalysis && !det.aiLoading && (() => {
+                                    const ai = det.aiAnalysis;
+                                    if (ai.error) return <p style={{ color: RED, fontSize: "0.75rem" }}>Erreur : {ai.error}</p>;
+                                    const hColor = (o: string) => o === "haussier" ? GREEN : o === "baissier" ? RED : ORANGE;
+                                    return (
+                                      <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
+                                        {ai.synthese && <p style={{ fontSize: "0.8rem", color: "var(--text-primary)", margin: 0, lineHeight: 1.6 }}>{ai.synthese}</p>}
+
+                                        {/* Horizons */}
+                                        {ai.horizons && (
+                                          <div>
+                                            <div style={{ fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: "0.4rem" }}>Horizons temporels</div>
+                                            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.4rem" }}>
+                                              {Object.entries(ai.horizons).map(([h, d]: [string, any]) => (
+                                                <div key={h} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 4, padding: "0.5rem 0.6rem", borderTop: `2px solid ${hColor(d.outlook)}` }}>
+                                                  <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600 }}>{h.replace("an","").replace("ans","")+" an"+(h.includes("ans")?"s":"")}</div>
+                                                  <div style={{ fontSize: "0.72rem", fontWeight: 700, color: hColor(d.outlook) }}>{d.outlook}</div>
+                                                  <div style={{ fontSize: "0.68rem", color: GOLD }}>{d.potentiel}</div>
+                                                  <div style={{ fontSize: "0.63rem", color: "var(--text-muted)", marginTop: "0.2rem" }}>{d.catalyseurs}</div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Profils */}
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+                                          {ai.profil_dca && (
+                                            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 4, padding: "0.6rem", borderLeft: `3px solid ${ai.profil_dca.adapte ? GREEN : "var(--border)"}` }}>
+                                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.3rem" }}>
+                                                <span style={{ fontSize: "0.72rem", fontWeight: 700, color: ai.profil_dca.adapte ? GREEN : "var(--text-muted)" }}>{ai.profil_dca.adapte ? "✓" : "✗"} DCA</span>
+                                                <span style={{ fontSize: "0.68rem", color: GOLD }}>{ai.profil_dca.score_dca}/10</span>
+                                              </div>
+                                              {ai.profil_dca.zone_accumulation && <div style={{ fontSize: "0.67rem", color: "var(--text-muted)", marginBottom: "0.2rem" }}>Zone : <span style={{ color: GOLD }}>{ai.profil_dca.zone_accumulation}</span></div>}
+                                              {ai.profil_dca.frequence_recommandee && <div style={{ fontSize: "0.67rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>Fréquence : {ai.profil_dca.frequence_recommandee}</div>}
+                                              <p style={{ fontSize: "0.7rem", color: "var(--text-secondary)", margin: 0 }}>{ai.profil_dca.raison}</p>
+                                            </div>
+                                          )}
+                                          {ai.profil_swing && (
+                                            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 4, padding: "0.6rem", borderLeft: `3px solid ${ai.profil_swing.adapte ? ORANGE : "var(--border)"}` }}>
+                                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.3rem" }}>
+                                                <span style={{ fontSize: "0.72rem", fontWeight: 700, color: ai.profil_swing.adapte ? ORANGE : "var(--text-muted)" }}>{ai.profil_swing.adapte ? "✓" : "✗"} Swing / Gros coup</span>
+                                                <span style={{ fontSize: "0.68rem", color: GOLD }}>{ai.profil_swing.score_swing}/10</span>
+                                              </div>
+                                              {ai.profil_swing.entree_ideale && <div style={{ fontSize: "0.67rem", color: "var(--text-muted)", marginBottom: "0.2rem" }}>Entrée : {ai.profil_swing.entree_ideale}</div>}
+                                              {ai.profil_swing.ratio_risque_rendement && <div style={{ fontSize: "0.67rem", color: "var(--text-muted)", marginBottom: "0.25rem" }}>R/R : <span style={{ color: GOLD }}>{ai.profil_swing.ratio_risque_rendement}</span></div>}
+                                              <p style={{ fontSize: "0.7rem", color: "var(--text-secondary)", margin: 0 }}>{ai.profil_swing.raison}</p>
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Risques & Catalyseurs */}
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+                                          {ai.risques_principaux?.length > 0 && (
+                                            <div>
+                                              <div style={{ fontSize: "0.63rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: RED, marginBottom: "0.25rem" }}>⚠ Risques</div>
+                                              {ai.risques_principaux.map((r: string, i: number) => <div key={i} style={{ fontSize: "0.7rem", color: "var(--text-secondary)", marginBottom: "0.1rem" }}>• {r}</div>)}
+                                            </div>
+                                          )}
+                                          {ai.catalyseurs_positifs?.length > 0 && (
+                                            <div>
+                                              <div style={{ fontSize: "0.63rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: GREEN, marginBottom: "0.25rem" }}>▲ Catalyseurs</div>
+                                              {ai.catalyseurs_positifs.map((c: string, i: number) => <div key={i} style={{ fontSize: "0.7rem", color: "var(--text-secondary)", marginBottom: "0.1rem" }}>• {c}</div>)}
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {ai.verdict_final && (
+                                          <div style={{ background: "rgba(201,168,76,0.08)", borderRadius: 4, padding: "0.7rem 1rem", borderLeft: `3px solid ${GOLD}` }}>
+                                            <p style={{ fontSize: "0.78rem", color: "var(--text-primary)", margin: 0, lineHeight: 1.6 }}>{ai.verdict_final}</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+
                               {/* Chart */}
                               {det.chartData && (
                                 <div className="chart-container" style={{ marginBottom: "1rem" }}>
