@@ -983,6 +983,15 @@ def get_pea_tickers():
     return jsonify(ALL_PEA_TICKERS)
 
 
+@app.route("/api/trading/cycle", methods=["POST"])
+def trading_cycle_manual():
+    """Déclenche manuellement un cycle de trading (sans CRON_SECRET)."""
+    enabled = get_setting("trading_enabled", "false") == "true"
+    if not enabled:
+        return jsonify({"skipped": "trading désactivé — cliquez Démarrer d'abord"})
+    return _run_trading_cycle()
+
+
 @app.route("/api/cron", methods=["GET", "POST"])
 def cron_cycle():
     """Cycle de trading + pré-calcul des scores — appelé par Vercel Cron."""
@@ -996,6 +1005,11 @@ def cron_cycle():
     if not enabled:
         return jsonify({"skipped": "trading disabled"})
 
+    return _run_trading_cycle()
+
+
+def _run_trading_cycle():
+    """Logique du cycle de trading partagée entre cron et déclenchement manuel."""
     settings = _get_risk_settings()
     risk_manager = _get_risk_manager()
 

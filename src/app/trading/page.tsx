@@ -125,8 +125,15 @@ export default function TradingPage() {
   const { data: logs } = useSWR<TradingLog[]>("portfolio-logs", () => getPortfolioLogs(30) as any, { refreshInterval: 10000 });
   const { data: snapshots } = useSWR<PortfolioSnapshot[]>("portfolio-snapshots", getPortfolioSnapshots as any, { refreshInterval: 60000 });
 
-  const [localSettings, setLocalSettings] = useState<RiskSettings | null>(null);
-  useEffect(() => { if (settings && !localSettings) setLocalSettings(settings); }, [settings]);
+  const [localSettings, setLocalSettings] = useState<RiskSettings>({
+    strategy: "combined",
+    tickers: ALL_TICKERS.slice(0, 5),
+    stop_loss: -2.5,
+    take_profit: 4.0,
+    max_position: 20,
+    max_positions: 5,
+  });
+  useEffect(() => { if (settings) setLocalSettings(settings); }, [settings]);
 
   const msg = (m: string) => { setActionMsg(m); setTimeout(() => setActionMsg(""), 3000); };
 
@@ -144,22 +151,46 @@ export default function TradingPage() {
   };
 
   const handleSaveSettings = async () => {
-    if (!localSettings) return;
     setSaving(true);
     await updateTradingSettings(localSettings as any);
     mutateSettings(); setSaving(false); msg("Paramètres sauvegardés.");
   };
 
+  const handleRunCycle = async () => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("trading_token") : null;
+      const res = await fetch("/api/trading/cycle", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const data = await res.json();
+      if (data.skipped) {
+        msg(`Cycle ignoré : ${data.skipped}`);
+      } else {
+        const actions = data.actions?.length ?? 0;
+        const checks = data.checks?.length ?? 0;
+        msg(`Cycle exécuté : ${checks} tickers analysés, ${actions} action(s) effectuée(s).`);
+        mutatePortfolio(); mutateStatus();
+      }
+    } catch (e: any) {
+      msg(`Erreur : ${e.message}`);
+    }
+  };
+
   const applyProfile = (key: keyof typeof PROFILES) => {
     const p = PROFILES[key];
-    setLocalSettings((prev) => prev ? {
+    setLocalSettings((prev) => ({
       ...prev,
       strategy: p.strategy,
       stop_loss: p.stop_loss,
       take_profit: p.take_profit,
       max_position: p.max_position,
       max_positions: p.max_positions,
-    } : null);
+    }));
+    msg(`Profil "${p.name}" appliqué. Pensez à sauvegarder.`);
   };
 
   const generateAIStrategy = async () => {
@@ -191,16 +222,16 @@ export default function TradingPage() {
   };
 
   const applyAIStrategy = () => {
-    if (!aiResult || !localSettings) return;
-    setLocalSettings({
-      ...localSettings,
+    if (!aiResult) return;
+    setLocalSettings((prev) => ({
+      ...prev,
       strategy: aiResult.strategy,
       tickers: aiResult.tickers,
       stop_loss: aiResult.stop_loss,
       take_profit: aiResult.take_profit,
       max_position: aiResult.max_position,
       max_positions: aiResult.max_positions,
-    });
+    }));
     msg(`Stratégie "${aiResult.profile_name}" appliquée. Pensez à sauvegarder.`);
   };
 
@@ -295,7 +326,7 @@ export default function TradingPage() {
 
         <hr style={{ borderColor: "var(--border)", marginBottom: "1rem" }} />
 
-        {localSettings && (
+        {true && (
           <>
             <label>Stratégie</label>
             <select
@@ -482,6 +513,9 @@ export default function TradingPage() {
           </button>
           <button className="btn btn-secondary" onClick={handleStop} disabled={!isEnabled}>
             Arrêter
+          </button>
+          <button className="btn btn-secondary" onClick={handleRunCycle} disabled={!isEnabled} title="Exécuter un cycle d'analyse immédiatement">
+            ▶ Lancer un cycle
           </button>
           <button className="btn btn-danger" onClick={handleReset}>
             Réinitialiser
