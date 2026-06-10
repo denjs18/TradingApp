@@ -189,6 +189,13 @@ def _init_sqlite():
                 long_term_outlook TEXT,
                 computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                groq_api_key TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """
         for stmt in stmts.split(";"):
             stmt = stmt.strip()
@@ -283,6 +290,13 @@ def _init_postgres():
                 medium_term_outlook TEXT,
                 long_term_outlook TEXT,
                 computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+            """CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                groq_api_key TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
         ]
         for stmt in tables:

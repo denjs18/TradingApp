@@ -6,8 +6,11 @@ import os
 # Assurer que le répertoire parent (racine du projet) est dans le path Python
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import jwt
+import datetime
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
 
 from database.db import init_db, get_db, get_setting, set_setting, USE_POSTGRES
 from trading.paper_engine import PaperTradingEngine
@@ -33,6 +36,76 @@ from config import (
 
 app = Flask(__name__)
 CORS(app)
+
+JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-change-in-prod")
+JWT_ALGORITHM = "HS256"
+
+
+def sanitize(obj):
+    """Recursively convert numpy/pandas types to native Python for JSON."""
+    import numpy as np
+    if isinstance(obj, dict):
+        return {k: sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [sanitize(v) for v in obj]
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, np.ndarray):
+        return sanitize(obj.tolist())
+    try:
+        import pandas as pd
+        if hasattr(pd, 'isna') and pd.isna(obj):
+            return None
+    except Exception:
+        pass
+    return obj
+
+
+def _make_token(user_id: str, email: str) -> str:
+    payload = {
+        "user_id": user_id,
+        "email": email,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=30),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def get_current_user() -> dict | None:
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    token = auth_header[7:]
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = payload.get("user_id")
+        email = payload.get("email")
+        if not user_id:
+            return None
+        try:
+            with get_db() as conn:
+                user = conn.execute(
+                    "SELECT id, email, groq_api_key, created_at FROM users WHERE id = ?",
+                    (user_id,)
+                ).fetchone()
+                if not user:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO users (id, email, password_hash) VALUES (?, ?, ?)",
+                        (user_id, email, "")
+                    )
+                    user = conn.execute(
+                        "SELECT id, email, groq_api_key, created_at FROM users WHERE id = ?",
+                        (user_id,)
+                    ).fetchone()
+            return user
+        except Exception:
+            return {"id": user_id, "email": email, "groq_api_key": None, "created_at": None}
+    except Exception:
+        return None
+
 
 # Initialiser la base de données au démarrage
 try:
@@ -71,6 +144,100 @@ def _get_risk_manager() -> RiskManager:
 @app.route("/api/health")
 def health():
     return jsonify({"status": "ok", "postgres": USE_POSTGRES})
+
+
+# ── Auth ──────────────────────────────────────────────────────
+
+@app.route("/api/auth/register", methods=["POST"])
+def auth_register():
+    data = request.get_json() or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    if not email or not password:
+        return jsonify({"error": "Email et mot de passe requis"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "Mot de passe trop court (6 caractères min)"}), 400
+    try:
+        import uuid
+        user_id = str(uuid.uuid4())
+        pw_hash = generate_password_hash(password)
+        with get_db() as conn:
+            existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+            if existing:
+                return jsonify({"error": "Email déjà utilisé"}), 409
+            conn.execute(
+                "INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)",
+                (user_id, email, pw_hash)
+            )
+        token = _make_token(user_id, email)
+        return jsonify({"token": token, "user": {"id": user_id, "email": email, "has_groq_key": False}})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def auth_login():
+    data = request.get_json() or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    if not email or not password:
+        return jsonify({"error": "Email et mot de passe requis"}), 400
+    try:
+        with get_db() as conn:
+            user = conn.execute(
+                "SELECT id, email, password_hash, groq_api_key, created_at FROM users WHERE email = ?",
+                (email,)
+            ).fetchone()
+        if not user or not check_password_hash(user["password_hash"], password):
+            return jsonify({"error": "Email ou mot de passe incorrect"}), 401
+        token = _make_token(user["id"], user["email"])
+        return jsonify({
+            "token": token,
+            "user": {
+                "id": user["id"],
+                "email": user["email"],
+                "has_groq_key": bool(user["groq_api_key"]),
+                "created_at": user["created_at"],
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auth/me")
+def auth_me():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Non authentifié"}), 401
+    return jsonify({
+        "id": user["id"],
+        "email": user["email"],
+        "has_groq_key": bool(user.get("groq_api_key")),
+        "created_at": user.get("created_at"),
+    })
+
+
+@app.route("/api/auth/profile", methods=["PUT"])
+def auth_update_profile():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Non authentifié"}), 401
+    data = request.get_json() or {}
+    try:
+        with get_db() as conn:
+            if "groq_api_key" in data:
+                conn.execute(
+                    "UPDATE users SET groq_api_key = ? WHERE id = ?",
+                    (data["groq_api_key"] or None, user["id"])
+                )
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    return jsonify({"success": True})
 
 
 # ── Config ────────────────────────────────────────────────────
@@ -289,7 +456,7 @@ def opportunity_analyze():
             errors.append({"ticker": ticker, "error": str(e)})
 
     results.sort(key=lambda x: x["score"], reverse=True)
-    return jsonify({"results": results, "errors": errors})
+    return jsonify(sanitize({"results": results, "errors": errors}))
 
 
 @app.route("/api/opportunities/news/<ticker>")
@@ -304,6 +471,280 @@ def opportunity_news(ticker: str):
             "published": item["published"].strftime("%d/%m %H:%M") if item.get("published") else None,
         })
     return jsonify(serializable)
+
+
+# ── AI Advisor (Groq) ─────────────────────────────────────────
+
+@app.route("/api/ai/ticker", methods=["POST"])
+def ai_ticker_analysis():
+    """Analyse approfondie d'un ticker avec horizons temporels et profils investisseurs."""
+    import requests as req
+
+    user = get_current_user()
+    if user and user.get("groq_api_key"):
+        groq_key = user["groq_api_key"]
+    else:
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        if user:
+            return jsonify({"error": "Please add your Groq API key in your profile to use AI features"}), 403
+        return jsonify({"error": "GROQ_API_KEY not configured"}), 503
+
+    data = request.get_json() or {}
+    opp = data.get("opportunity", {})
+    if not opp:
+        return jsonify({"error": "no opportunity data"}), 400
+
+    fund = opp.get("details", {}).get("fundamental", {})
+    fundamentals = fund.get("fundamentals", {})
+
+    prompt = f"""Tu es un analyste financier senior. Voici les données complètes sur {opp.get('ticker')} ({opp.get('name', '')}), secteur: {opp.get('sector', '')}.
+
+DONNÉES TECHNIQUES:
+- Cours actuel: {opp.get('current_price')} €
+- Objectif analysts: {opp.get('target_price')} € (gain potentiel: {opp.get('gain_pct')}%)
+- Stop suggéré: {opp.get('stop_price')} €
+- Tendance: {opp.get('trend')}
+- Volatilité annuelle: {opp.get('volatility_annual')}%
+- Max drawdown (6 mois): {opp.get('max_drawdown')}%
+- Sharpe ratio: {opp.get('sharpe_ratio')}
+- Niveau de risque: {opp.get('risk_level')}
+- Score global: {opp.get('score')}/10 ({opp.get('recommendation')})
+- Score technique: {opp.get('technical_score')}, fondamental: {opp.get('fundamental_score')}, sentiment: {opp.get('sentiment_score')}
+
+DONNÉES FONDAMENTALES:
+- P/E: {fundamentals.get('pe_ratio')}, PEG: {fundamentals.get('peg_ratio')}, P/B: {fundamentals.get('price_to_book')}
+- Marge nette: {fundamentals.get('profit_margin')}, ROE: {fundamentals.get('return_on_equity')}
+- Croissance CA: {fundamentals.get('revenue_growth')}, Croissance BPA: {fundamentals.get('earnings_growth')}
+- Dette/Capitaux propres: {fundamentals.get('debt_to_equity')}
+- Dividende: {fundamentals.get('dividend_yield')} (rendement)
+- Beta: {fundamentals.get('beta')}
+- Capitalisation: {fundamentals.get('market_cap')}
+
+Génère une analyse structurée en JSON:
+{{
+  "synthese": "<2-3 phrases résumant la situation actuelle>",
+  "horizons": {{
+    "1an": {{"outlook": "haussier|neutre|baissier", "potentiel": "<fourchette de prix estimée>", "catalyseurs": "<1-2 facteurs clés>"}},
+    "3ans": {{"outlook": "haussier|neutre|baissier", "potentiel": "<fourchette>", "catalyseurs": "<facteurs>"}},
+    "5ans": {{"outlook": "haussier|neutre|baissier", "potentiel": "<fourchette>", "catalyseurs": "<facteurs>"}},
+    "10ans": {{"outlook": "haussier|neutre|baissier", "potentiel": "<fourchette>", "catalyseurs": "<facteurs>"}}
+  }},
+  "profil_dca": {{
+    "adapte": true/false,
+    "score_dca": <0-10>,
+    "frequence_recommandee": "mensuelle|trimestrielle|annuelle",
+    "zone_accumulation": "<fourchette de prix idéale pour DCA>",
+    "raison": "<2-3 phrases expliquant pourquoi le DCA est adapté ou non>"
+  }},
+  "profil_swing": {{
+    "adapte": true/false,
+    "score_swing": <0-10>,
+    "entree_ideale": "<prix ou condition d'entrée>",
+    "objectif_court_terme": "<prix cible à 3-6 mois>",
+    "stop_loss": "<niveau de stop recommandé>",
+    "ratio_risque_rendement": "<ex: 1:3>",
+    "raison": "<2-3 phrases>"
+  }},
+  "risques_principaux": ["<risque 1>", "<risque 2>", "<risque 3>"],
+  "catalyseurs_positifs": ["<catalyseur 1>", "<catalyseur 2>"],
+  "verdict_final": "<1 paragraphe de conclusion avec recommandation claire>"
+}}
+
+Réponds UNIQUEMENT avec le JSON valide."""
+
+    try:
+        resp = req.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.25,
+                "max_tokens": 1800,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        import json as _json
+        start = content.find("{")
+        end = content.rfind("}") + 1
+        if start >= 0 and end > start:
+            return jsonify(_json.loads(content[start:end]))
+        return jsonify({"verdict_final": content})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/ai/strategy", methods=["POST"])
+def ai_strategy_builder():
+    """Génère une stratégie de trading automatique personnalisée via Groq."""
+    import requests as req
+    import json as _json
+
+    user = get_current_user()
+    if user and user.get("groq_api_key"):
+        groq_key = user["groq_api_key"]
+    else:
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        if user:
+            return jsonify({"error": "Ajoutez votre clé Groq dans votre profil pour utiliser cette fonctionnalité"}), 403
+        return jsonify({"error": "GROQ_API_KEY non configuré"}), 503
+
+    data = request.get_json() or {}
+    description = data.get("description", "").strip()
+    capital = float(data.get("capital", 10000))
+    risk_tolerance = data.get("risk_tolerance", "modéré")
+
+    if not description:
+        return jsonify({"error": "description requise"}), 400
+
+    available_tickers = ", ".join(ALL_TICKERS[:50])
+
+    prompt = (
+        "Tu es un expert en trading algorithmique et en gestion de portefeuille. "
+        "Un investisseur te décrit ses objectifs de trading automatique.\n\n"
+        f"Description : \"{description}\"\n"
+        f"Capital disponible : {capital:.0f}€\n"
+        f"Tolérance au risque déclarée : {risk_tolerance}\n\n"
+        f"Tickers PEA disponibles (exemples) : {available_tickers}\n\n"
+        "Génère une configuration optimale pour un système de trading automatique paper trading. "
+        "Réponds UNIQUEMENT avec ce JSON (aucun texte autour) :\n"
+        '{\n'
+        '  "strategy": "<momentum|mean_reversion|breakout|combined>",\n'
+        '  "tickers": ["TICKER1.PA", "TICKER2.PA"],\n'
+        '  "stop_loss": <négatif entre -10 et -0.5>,\n'
+        '  "take_profit": <positif entre 0.5 et 15>,\n'
+        '  "max_position": <entier 5-50>,\n'
+        '  "max_positions": <entier 1-10>,\n'
+        '  "reasoning": "<2-3 phrases expliquant les choix>",\n'
+        '  "warnings": "<1-2 phrases sur les risques>",\n'
+        '  "profile_name": "<nom court ex: Tech Momentum>"\n'
+        '}\n\n'
+        "Règles : 3-12 tickers max, adapte stop/take_profit au risque réel, "
+        "max_position <= 30% pour profil modéré/prudent."
+    )
+
+    try:
+        resp = req.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.4,
+                "max_tokens": 800,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        start = content.find("{")
+        end = content.rfind("}") + 1
+        if start < 0 or end <= start:
+            return jsonify({"error": "Réponse IA invalide"}), 500
+
+        cfg = _json.loads(content[start:end])
+        cfg.setdefault("strategy", "combined")
+        cfg.setdefault("tickers", ALL_TICKERS[:5])
+        cfg.setdefault("stop_loss", -2.5)
+        cfg.setdefault("take_profit", 4.0)
+        cfg.setdefault("max_position", 20)
+        cfg.setdefault("max_positions", 5)
+        cfg.setdefault("reasoning", "")
+        cfg.setdefault("warnings", "")
+        cfg.setdefault("profile_name", "Stratégie IA")
+
+        cfg["stop_loss"] = float(cfg["stop_loss"])
+        cfg["take_profit"] = float(cfg["take_profit"])
+        cfg["max_position"] = int(cfg["max_position"])
+        cfg["max_positions"] = int(cfg["max_positions"])
+        if isinstance(cfg["tickers"], list):
+            cfg["tickers"] = [str(t) for t in cfg["tickers"]]
+
+        return jsonify(cfg)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/ai/advisor", methods=["POST"])
+def ai_advisor():
+    """Analyse les résultats de scoring avec Groq et retourne des conseils."""
+    import requests as req
+
+    user = get_current_user()
+    if user and user.get("groq_api_key"):
+        groq_key = user["groq_api_key"]
+    else:
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        if user:
+            return jsonify({"error": "Please add your Groq API key in your profile to use AI features"}), 403
+        return jsonify({"error": "GROQ_API_KEY not configured"}), 503
+
+    data = request.get_json() or {}
+    results = data.get("results", [])
+    if not results:
+        return jsonify({"error": "no results"}), 400
+
+    # Préparer un résumé compact pour le prompt
+    top = sorted(results, key=lambda x: x.get("score", 0), reverse=True)[:15]
+    lines = []
+    for r in top:
+        lines.append(
+            f"- {r['ticker']} ({r.get('name','')}) : score {r.get('score',0):.1f}/10, "
+            f"recommandation={r.get('recommendation','')}, "
+            f"gain_potentiel={r.get('gain_pct') or 0:.1f}%, "
+            f"technique={r.get('technical_score',0):.2f}, "
+            f"fondamental={r.get('fundamental_score',0):.2f}, "
+            f"sentiment={r.get('sentiment_score',0):.2f}"
+        )
+    summary_text = "\n".join(lines)
+
+    prompt = f"""Tu es un conseiller en investissement PEA expérimenté. Voici les résultats d'une analyse multi-facteurs de {len(results)} actions européennes éligibles PEA.
+
+TOP 15 par score :
+{summary_text}
+
+Fournis une analyse structurée en JSON avec exactement ce format :
+{{
+  "synthese": "<3-4 phrases résumant les opportunités du moment>",
+  "top_achats": [
+    {{"ticker": "...", "raison": "<1 phrase>", "conviction": "haute|moyenne|faible"}}
+  ],
+  "secteurs_favoris": ["...", "..."],
+  "risques": "<2-3 phrases sur les risques actuels>",
+  "strategie_recommandee": "<1 paragraphe sur la stratégie PEA à adopter>"
+}}
+
+Réponds UNIQUEMENT avec le JSON, sans markdown ni texte autour."""
+
+    try:
+        resp = req.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "max_tokens": 1200,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        import json as _json
+        start = content.find("{")
+        end = content.rfind("}") + 1
+        if start >= 0 and end > start:
+            advice = _json.loads(content[start:end])
+        else:
+            advice = {"synthese": content, "top_achats": [], "secteurs_favoris": [], "risques": "", "strategie_recommandee": ""}
+        return jsonify(advice)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ── DCA Advisor ───────────────────────────────────────────────

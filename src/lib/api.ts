@@ -1,8 +1,16 @@
 const BASE = "/api";
 
+function getAuthHeaders(): HeadersInit {
+  const token = typeof window !== "undefined" ? localStorage.getItem("trading_token") : null;
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(),
     ...options,
   });
   if (!res.ok) {
@@ -76,6 +84,24 @@ export const analyzeOpportunities = (tickers: string[]) =>
 
 export const getOpportunityNews = (ticker: string) =>
   fetchJSON(`${BASE}/opportunities/news/${encodeURIComponent(ticker)}`);
+
+export const getAIAdvice = (results: any[]) =>
+  fetchJSON(`${BASE}/ai/advisor`, {
+    method: "POST",
+    body: JSON.stringify({ results }),
+  });
+
+export const getAITickerAnalysis = (opportunity: any) =>
+  fetchJSON(`${BASE}/ai/ticker`, {
+    method: "POST",
+    body: JSON.stringify({ opportunity }),
+  });
+
+export const getAIStrategy = (description: string, capital: number, risk_tolerance: string) =>
+  fetchJSON(`${BASE}/ai/strategy`, {
+    method: "POST",
+    body: JSON.stringify({ description, capital, risk_tolerance }),
+  });
 
 // ── DCA ───────────────────────────────────────────────────────
 
