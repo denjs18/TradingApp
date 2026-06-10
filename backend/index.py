@@ -8,8 +8,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 
+import jwt
+import datetime
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
 
 from database.db import init_db, get_db, get_setting, set_setting, USE_POSTGRES
 from trading.paper_engine import PaperTradingEngine
@@ -78,6 +81,135 @@ except Exception as e:
     print(f"Warning: init_db failed: {e}\n{traceback.format_exc()}")
 
 engine = PaperTradingEngine()
+
+JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-change-in-prod")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_DAYS = 30
+
+
+def _make_token(user_id: int, email: str) -> str:
+    payload = {
+        "user_id": user_id,
+        "email": email,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=JWT_EXPIRY_DAYS),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def get_current_user() -> dict | None:
+    """Read Authorization: Bearer <token> header and return user dict or None."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    token = auth_header[7:]
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = payload.get("user_id")
+        if not user_id:
+            return None
+        with get_db() as conn:
+            user = conn.execute(
+                "SELECT id, email, groq_api_key, default_sectors, default_min_score, created_at FROM users WHERE id = ?",
+                (user_id,)
+            ).fetchone()
+        return user
+    except Exception:
+        return None
+
+
+# ── Auth endpoints ────────────────────────────────────────────
+
+@app.route("/api/auth/register", methods=["POST"])
+def auth_register():
+    data = request.get_json() or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    if not email or not password:
+        return jsonify({"error": "Email and password required"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters"}), 400
+    password_hash = generate_password_hash(password)
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO users (email, password_hash) VALUES (?, ?)",
+                (email, password_hash),
+            )
+            user = conn.execute(
+                "SELECT id, email FROM users WHERE email = ?", (email,)
+            ).fetchone()
+    except Exception as e:
+        if "UNIQUE" in str(e) or "unique" in str(e) or "duplicate" in str(e).lower():
+            return jsonify({"error": "Email already registered"}), 409
+        return jsonify({"error": str(e)}), 500
+    token = _make_token(user["id"], user["email"])
+    return jsonify({"token": token, "user": {"id": user["id"], "email": user["email"]}}), 201
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def auth_login():
+    data = request.get_json() or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    if not email or not password:
+        return jsonify({"error": "Email and password required"}), 400
+    with get_db() as conn:
+        user = conn.execute(
+            "SELECT id, email, password_hash FROM users WHERE email = ?", (email,)
+        ).fetchone()
+    if not user or not check_password_hash(user["password_hash"], password):
+        return jsonify({"error": "Invalid email or password"}), 401
+    token = _make_token(user["id"], user["email"])
+    return jsonify({"token": token, "user": {"id": user["id"], "email": user["email"]}})
+
+
+@app.route("/api/auth/me", methods=["GET"])
+def auth_me():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify({
+        "id": user["id"],
+        "email": user["email"],
+        "has_groq_key": bool(user.get("groq_api_key")),
+        "default_sectors": user.get("default_sectors", "[]"),
+        "default_min_score": user.get("default_min_score", 0),
+        "created_at": str(user.get("created_at", "")),
+    })
+
+
+@app.route("/api/auth/profile", methods=["PUT"])
+def auth_profile():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json() or {}
+    fields = []
+    values = []
+    if "groq_api_key" in data:
+        fields.append("groq_api_key = ?")
+        values.append(data["groq_api_key"] or None)
+    if "default_sectors" in data:
+        import json as _json
+        sectors = data["default_sectors"]
+        fields.append("default_sectors = ?")
+        values.append(_json.dumps(sectors) if isinstance(sectors, list) else sectors)
+    if "default_min_score" in data:
+        fields.append("default_min_score = ?")
+        values.append(float(data["default_min_score"]))
+    if not fields:
+        return jsonify({"error": "No fields to update"}), 400
+    values.append(user["id"])
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values
+        )
+    return jsonify({"success": True})
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    return jsonify({"success": True})
 
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -350,8 +482,14 @@ def ai_ticker_analysis():
     """Analyse approfondie d'un ticker avec horizons temporels et profils investisseurs."""
     import requests as req
 
-    groq_key = os.environ.get("GROQ_API_KEY", "")
+    user = get_current_user()
+    if user and user.get("groq_api_key"):
+        groq_key = user["groq_api_key"]
+    else:
+        groq_key = os.environ.get("GROQ_API_KEY", "")
     if not groq_key:
+        if user:
+            return jsonify({"error": "Please add your Groq API key in your profile to use AI features"}), 403
         return jsonify({"error": "GROQ_API_KEY not configured"}), 503
 
     data = request.get_json() or {}
@@ -446,8 +584,14 @@ def ai_advisor():
     """Analyse les résultats de scoring avec Groq et retourne des conseils."""
     import requests as req
 
-    groq_key = os.environ.get("GROQ_API_KEY", "")
+    user = get_current_user()
+    if user and user.get("groq_api_key"):
+        groq_key = user["groq_api_key"]
+    else:
+        groq_key = os.environ.get("GROQ_API_KEY", "")
     if not groq_key:
+        if user:
+            return jsonify({"error": "Please add your Groq API key in your profile to use AI features"}), 403
         return jsonify({"error": "GROQ_API_KEY not configured"}), 503
 
     data = request.get_json() or {}

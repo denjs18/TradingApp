@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getMarketStatus, getPortfolioSummary } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 export default function HomePage() {
+  const { user, logout } = useAuth();
   const [market, setMarket] = useState<{ is_open: boolean; is_weekday: boolean } | null>(null);
   const [portfolio, setPortfolio] = useState<{ total_value: number; total_pnl: number } | null>(null);
 
@@ -90,6 +92,25 @@ export default function HomePage() {
               />
               {market.is_open ? "Marché ouvert" : "Marché fermé"}
             </span>
+          )}
+          {user ? (
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", fontSize: "0.75rem" }}>
+              <span style={{ color: "var(--text-muted)" }}>{user.email}</span>
+              <Link href="/profile" style={{ color: "var(--gold)", textDecoration: "none" }}>
+                Profil
+              </Link>
+              <button
+                onClick={logout}
+                className="btn btn-secondary"
+                style={{ padding: "0.25rem 0.6rem", fontSize: "0.7rem" }}
+              >
+                Déconnexion
+              </button>
+            </div>
+          ) : (
+            <Link href="/login" className="btn btn-secondary" style={{ fontSize: "0.75rem" }}>
+              Connexion
+            </Link>
           )}
         </div>
       </nav>
