@@ -464,11 +464,16 @@ def opportunity_analyze():
                         target_price, stop_price, justification)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        opp["ticker"], opp["score"], opp["technical_score"],
-                        opp["fundamental_score"], opp["sentiment_score"],
-                        opp["recommendation"], opp.get("entry_price"),
-                        opp.get("target_price"), opp.get("stop_price"),
-                        opp["justification"],
+                        str(opp["ticker"]),
+                        float(opp["score"]),
+                        float(opp["technical_score"]) if opp.get("technical_score") is not None else None,
+                        float(opp["fundamental_score"]) if opp.get("fundamental_score") is not None else None,
+                        float(opp["sentiment_score"]) if opp.get("sentiment_score") is not None else None,
+                        str(opp["recommendation"]),
+                        float(opp["entry_price"]) if opp.get("entry_price") is not None else None,
+                        float(opp["target_price"]) if opp.get("target_price") is not None else None,
+                        float(opp["stop_price"]) if opp.get("stop_price") is not None else None,
+                        str(opp["justification"]),
                     ),
                 )
         except Exception as e:
@@ -670,6 +675,98 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni texte autour."""
         else:
             advice = {"synthese": content, "top_achats": [], "secteurs_favoris": [], "risques": "", "strategie_recommandee": ""}
         return jsonify(advice)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/ai/strategy", methods=["POST"])
+def ai_strategy_builder():
+    """Génère une stratégie de trading automatique personnalisée via Groq."""
+    import requests as req
+    import json as _json
+
+    user = get_current_user()
+    if user and user.get("groq_api_key"):
+        groq_key = user["groq_api_key"]
+    else:
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        if user:
+            return jsonify({"error": "Ajoutez votre clé Groq dans votre profil pour utiliser cette fonctionnalité"}), 403
+        return jsonify({"error": "GROQ_API_KEY non configuré"}), 503
+
+    data = request.get_json() or {}
+    description = data.get("description", "").strip()
+    capital = float(data.get("capital", 10000))
+    risk_tolerance = data.get("risk_tolerance", "modéré")
+
+    if not description:
+        return jsonify({"error": "description requise"}), 400
+
+    available_tickers = ", ".join(ALL_TICKERS[:50])
+
+    prompt = (
+        "Tu es un expert en trading algorithmique et en gestion de portefeuille. "
+        "Un investisseur te décrit ses objectifs de trading automatique.\n\n"
+        f"Description : \"{description}\"\n"
+        f"Capital disponible : {capital:.0f}€\n"
+        f"Tolérance au risque déclarée : {risk_tolerance}\n\n"
+        f"Tickers PEA disponibles (exemples) : {available_tickers}\n\n"
+        "Génère une configuration optimale pour un système de trading automatique paper trading. "
+        "Réponds UNIQUEMENT avec ce JSON (aucun texte autour) :\n"
+        '{\n'
+        '  "strategy": "<momentum|mean_reversion|breakout|combined>",\n'
+        '  "tickers": ["TICKER1.PA", "TICKER2.PA"],\n'
+        '  "stop_loss": <négatif entre -10 et -0.5>,\n'
+        '  "take_profit": <positif entre 0.5 et 15>,\n'
+        '  "max_position": <entier 5-50>,\n'
+        '  "max_positions": <entier 1-10>,\n'
+        '  "reasoning": "<2-3 phrases expliquant les choix>",\n'
+        '  "warnings": "<1-2 phrases sur les risques>",\n'
+        '  "profile_name": "<nom court ex: Tech Momentum>"\n'
+        '}\n\n'
+        "Règles : 3-12 tickers max, adapte stop/take_profit au risque réel, "
+        "max_position <= 30% pour profil modéré/prudent."
+    )
+
+    try:
+        resp = req.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.4,
+                "max_tokens": 800,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        start = content.find("{")
+        end = content.rfind("}") + 1
+        if start < 0 or end <= start:
+            return jsonify({"error": "Réponse IA invalide"}), 500
+
+        cfg = _json.loads(content[start:end])
+        cfg.setdefault("strategy", "combined")
+        cfg.setdefault("tickers", ALL_TICKERS[:5])
+        cfg.setdefault("stop_loss", -2.5)
+        cfg.setdefault("take_profit", 4.0)
+        cfg.setdefault("max_position", 20)
+        cfg.setdefault("max_positions", 5)
+        cfg.setdefault("reasoning", "")
+        cfg.setdefault("warnings", "")
+        cfg.setdefault("profile_name", "Stratégie IA")
+
+        cfg["stop_loss"] = float(cfg["stop_loss"])
+        cfg["take_profit"] = float(cfg["take_profit"])
+        cfg["max_position"] = int(cfg["max_position"])
+        cfg["max_positions"] = int(cfg["max_positions"])
+        if isinstance(cfg["tickers"], list):
+            cfg["tickers"] = [str(t) for t in cfg["tickers"]]
+
+        return jsonify(cfg)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

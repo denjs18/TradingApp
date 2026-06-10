@@ -22,6 +22,26 @@ const GREEN = "#3d9e6e";
 const RED = "#c84848";
 const ORANGE = "#d4834a";
 
+const STRATEGY_DESCRIPTIONS: Record<string, string> = {
+  momentum: "Suit la tendance haussière",
+  mean_reversion: "Retour à la moyenne",
+  breakout: "Cassures de niveaux",
+  combined: "Combinaison des 3 stratégies",
+};
+
+interface AIStrategyResult {
+  strategy: string;
+  tickers: string[];
+  stop_loss: number;
+  take_profit: number;
+  max_position: number;
+  max_positions: number;
+  reasoning: string;
+  warnings: string;
+  profile_name: string;
+  error?: string;
+}
+
 const PROFILES = {
   prudent: { name: "Prudent", strategy: "mean_reversion", stop_loss: -1.5, take_profit: 2.0, max_position: 10, max_positions: 3 },
   equilibre: { name: "Équilibré", strategy: "combined", stop_loss: -2.5, take_profit: 4.0, max_position: 20, max_positions: 5 },
@@ -81,6 +101,14 @@ export default function TradingPage() {
   const [selectedChartTicker, setSelectedChartTicker] = useState<string | null>(null);
   const [chartData, setChartData] = useState<OHLCVData | null>(null);
 
+  // AI Strategy Builder
+  const [aiDescription, setAiDescription] = useState("");
+  const [aiCapital, setAiCapital] = useState(10000);
+  const [aiRisk, setAiRisk] = useState("modéré");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<AIStrategyResult | null>(null);
+  const [aiError, setAiError] = useState("");
+
   const { data: summary, mutate: mutatePortfolio } = useSWR<PortfolioSummary>(
     "portfolio-summary", getPortfolioSummary, { refreshInterval: 15000 }
   );
@@ -134,6 +162,48 @@ export default function TradingPage() {
     } : null);
   };
 
+  const generateAIStrategy = async () => {
+    if (!aiDescription.trim()) return;
+    setAiLoading(true);
+    setAiError("");
+    setAiResult(null);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("trading_token") : null;
+      const res = await fetch("/api/ai/strategy", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ description: aiDescription, capital: aiCapital, risk_tolerance: aiRisk }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        setAiError(json.error || "Erreur inconnue");
+      } else {
+        setAiResult(json as AIStrategyResult);
+      }
+    } catch (e: any) {
+      setAiError(e.message || "Erreur réseau");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const applyAIStrategy = () => {
+    if (!aiResult || !localSettings) return;
+    setLocalSettings({
+      ...localSettings,
+      strategy: aiResult.strategy,
+      tickers: aiResult.tickers,
+      stop_loss: aiResult.stop_loss,
+      take_profit: aiResult.take_profit,
+      max_position: aiResult.max_position,
+      max_positions: aiResult.max_positions,
+    });
+    msg(`Stratégie "${aiResult.profile_name}" appliquée. Pensez à sauvegarder.`);
+  };
+
   const loadChart = useCallback(async (ticker: string) => {
     setSelectedChartTicker(ticker);
     try {
@@ -155,6 +225,57 @@ export default function TradingPage() {
         <Link href="/" style={{ fontSize: "0.7rem", color: "var(--text-muted)", textDecoration: "none", display: "block", marginBottom: "1rem" }}>
           ← Accueil
         </Link>
+
+        {/* AI Strategy Builder */}
+        <div style={{ marginBottom: "1rem", padding: "0.75rem", background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: 4 }}>
+          <div style={{ fontSize: "0.68rem", fontWeight: 700, color: GOLD, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: "0.6rem" }}>
+            ◈ IA Stratège
+          </div>
+          <textarea
+            value={aiDescription}
+            onChange={(e) => setAiDescription(e.target.value)}
+            placeholder="Ex : Je veux investir prudemment dans les grandes entreprises françaises avec 5000€, horizon 1 an, secteur défense et énergie..."
+            style={{
+              width: "100%", minHeight: 80, padding: "0.5rem", fontSize: "0.72rem",
+              background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 3,
+              color: "var(--text-primary)", resize: "vertical", fontFamily: "inherit", lineHeight: 1.5,
+              boxSizing: "border-box",
+            }}
+          />
+          <div style={{ display: "flex", gap: "0.4rem", marginTop: "0.4rem" }}>
+            <input
+              type="number" min={500} step={500}
+              value={aiCapital}
+              onChange={(e) => setAiCapital(+e.target.value)}
+              className="input"
+              style={{ flex: 1, fontSize: "0.72rem" }}
+              placeholder="Capital €"
+            />
+            <select
+              value={aiRisk}
+              onChange={(e) => setAiRisk(e.target.value)}
+              className="select"
+              style={{ flex: 1, fontSize: "0.72rem" }}
+            >
+              <option value="faible">Faible</option>
+              <option value="modéré">Modéré</option>
+              <option value="élevé">Élevé</option>
+            </select>
+          </div>
+          <button
+            className="btn btn-primary"
+            style={{ width: "100%", marginTop: "0.5rem", fontSize: "0.72rem" }}
+            onClick={generateAIStrategy}
+            disabled={aiLoading || !aiDescription.trim()}
+          >
+            {aiLoading ? "Analyse en cours…" : "Générer ma stratégie"}
+          </button>
+          {aiError && (
+            <div style={{ fontSize: "0.7rem", color: RED, marginTop: "0.4rem", padding: "0.3rem 0.5rem", background: "rgba(200,72,72,0.08)", borderRadius: 3 }}>
+              {aiError}
+            </div>
+          )}
+        </div>
 
         <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
           Profil de risque
@@ -279,6 +400,59 @@ export default function TradingPage() {
         {actionMsg && (
           <div style={{ background: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.3)", borderRadius: 3, padding: "0.5rem 1rem", marginBottom: "1rem", fontSize: "0.8rem", color: GOLD }}>
             {actionMsg}
+          </div>
+        )}
+
+        {/* AI Strategy Result */}
+        {aiResult && (
+          <div style={{ background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.25)", borderRadius: 5, padding: "1.25rem", marginBottom: "1.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
+              <div>
+                <span style={{ fontSize: "0.6rem", fontWeight: 700, color: GOLD, textTransform: "uppercase", letterSpacing: "0.15em" }}>◈ Stratégie IA générée</span>
+                <div style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text-primary)", marginTop: "0.15rem" }}>{aiResult.profile_name}</div>
+              </div>
+              <button className="btn btn-primary" onClick={applyAIStrategy} style={{ fontSize: "0.75rem", whiteSpace: "nowrap" }}>
+                Appliquer cette stratégie
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: "0.6rem", marginBottom: "0.9rem" }}>
+              {[
+                { label: "Stratégie", value: STRATEGY_DESCRIPTIONS[aiResult.strategy] ?? aiResult.strategy },
+                { label: "Stop-Loss", value: `${aiResult.stop_loss}%`, color: RED },
+                { label: "Take-Profit", value: `+${aiResult.take_profit}%`, color: GREEN },
+                { label: "Max position", value: `${aiResult.max_position}%` },
+                { label: "Max positions", value: String(aiResult.max_positions) },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{ background: "var(--surface2)", borderRadius: 3, padding: "0.5rem 0.6rem" }}>
+                  <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.2rem" }}>{label}</div>
+                  <div style={{ fontSize: "0.82rem", fontWeight: 600, color: color ?? "var(--text-primary)" }}>{value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginBottom: "0.6rem" }}>
+              <div style={{ fontSize: "0.62rem", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.3rem" }}>Tickers sélectionnés</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem" }}>
+                {aiResult.tickers.map((t) => (
+                  <span key={t} style={{ fontSize: "0.72rem", padding: "0.15rem 0.45rem", background: "rgba(201,168,76,0.12)", border: "1px solid rgba(201,168,76,0.3)", borderRadius: 3, color: GOLD, fontWeight: 600 }}>{t}</span>
+                ))}
+              </div>
+            </div>
+
+            {aiResult.reasoning && (
+              <div style={{ marginBottom: "0.5rem" }}>
+                <div style={{ fontSize: "0.62rem", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.25rem" }}>Raisonnement</div>
+                <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", lineHeight: 1.6, margin: 0 }}>{aiResult.reasoning}</p>
+              </div>
+            )}
+
+            {aiResult.warnings && (
+              <div style={{ background: "rgba(212,131,74,0.08)", border: "1px solid rgba(212,131,74,0.25)", borderRadius: 3, padding: "0.5rem 0.75rem" }}>
+                <div style={{ fontSize: "0.62rem", fontWeight: 600, color: ORANGE, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.2rem" }}>⚠ Points de vigilance</div>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.6 }}>{aiResult.warnings}</p>
+              </div>
+            )}
           </div>
         )}
 

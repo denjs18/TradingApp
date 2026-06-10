@@ -97,6 +97,12 @@ export const getAITickerAnalysis = (opportunity: any) =>
     body: JSON.stringify({ opportunity }),
   });
 
+export const getAIStrategy = (description: string, capital: number, risk_tolerance: string) =>
+  fetchJSON(`${BASE}/ai/strategy`, {
+    method: "POST",
+    body: JSON.stringify({ description, capital, risk_tolerance }),
+  });
+
 // ── DCA ───────────────────────────────────────────────────────
 
 export const getDCASummary = () =>
