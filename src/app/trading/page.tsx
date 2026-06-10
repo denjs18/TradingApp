@@ -15,6 +15,8 @@ import {
   getPortfolioSnapshots, getMarketHistory,
 } from "@/lib/api";
 
+const getLastCycle = () => fetch("/api/trading/last-cycle").then(r => r.json());
+
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
 const GOLD = "#c9a84c";
@@ -124,6 +126,7 @@ export default function TradingPage() {
   const { data: trades } = useSWR<Trade[]>("portfolio-trades", getPortfolioTrades as any, { refreshInterval: 30000 });
   const { data: logs } = useSWR<TradingLog[]>("portfolio-logs", () => getPortfolioLogs(30) as any, { refreshInterval: 10000 });
   const { data: snapshots } = useSWR<PortfolioSnapshot[]>("portfolio-snapshots", getPortfolioSnapshots as any, { refreshInterval: 60000 });
+  const { data: lastCycle, mutate: mutateLastCycle } = useSWR("last-cycle", getLastCycle, { refreshInterval: 15000 });
 
   const [localSettings, setLocalSettings] = useState<RiskSettings>({
     strategy: "combined",
@@ -172,8 +175,8 @@ export default function TradingPage() {
       } else {
         const actions = data.actions?.length ?? 0;
         const checks = data.checks?.length ?? 0;
-        msg(`Cycle exécuté : ${checks} tickers analysés, ${actions} action(s) effectuée(s).`);
-        mutatePortfolio(); mutateStatus();
+        msg(`Cycle exécuté : ${checks} tickers analysés, ${actions} action(s).`);
+        mutatePortfolio(); mutateStatus(); mutateLastCycle();
       }
     } catch (e: any) {
       msg(`Erreur : ${e.message}`);
@@ -755,6 +758,67 @@ export default function TradingPage() {
           </div>
         ) : (
           <p style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Aucun log disponible.</p>
+        )}
+
+        {/* Diagnostic du dernier cycle */}
+        <SectionTitle>Diagnostic — Dernier Cycle</SectionTitle>
+        {!lastCycle || (!lastCycle.ran_at && (!lastCycle.checks || lastCycle.checks.length === 0)) ? (
+          <div className="card" style={{ padding: "1rem" }}>
+            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", margin: 0 }}>
+              Aucun cycle exécuté.{" "}
+              {isEnabled
+                ? <>Cliquez sur <strong style={{ color: GOLD }}>▶ Lancer un cycle</strong> pour déclencher immédiatement une analyse.</>
+                : <>Cliquez sur <strong style={{ color: GREEN }}>Démarrer</strong> puis lancez un cycle.</>
+              }
+            </p>
+          </div>
+        ) : (
+          <div className="card" style={{ padding: 0 }}>
+            {lastCycle.ran_at && (
+              <div style={{ padding: "0.6rem 1rem", borderBottom: "1px solid var(--border)", fontSize: "0.7rem", color: "var(--text-muted)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>Dernier cycle : <strong style={{ color: "var(--text-secondary)" }}>{new Date(lastCycle.ran_at).toLocaleString("fr-FR")}</strong></span>
+                <span style={{ color: lastCycle.actions?.length > 0 ? GREEN : "var(--text-muted)" }}>
+                  {lastCycle.actions?.length > 0 ? `${lastCycle.actions.length} action(s) exécutée(s)` : "Aucun trade"}
+                </span>
+              </div>
+            )}
+            <table className="trading-table">
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Prix</th>
+                  <th>Signal</th>
+                  <th>Score</th>
+                  <th>Décision</th>
+                  <th>Détails</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(lastCycle.checks || []).map((c: any) => {
+                  const sigColor = c.signal === "achat" ? GREEN : c.signal === "vente" ? RED : "var(--text-muted)";
+                  const isAction = c.decision?.startsWith("✓");
+                  return (
+                    <tr key={c.ticker} style={isAction ? { background: "rgba(61,158,110,0.06)" } : undefined}>
+                      <td style={{ color: GOLD, fontWeight: 600 }}>{c.ticker}</td>
+                      <td style={{ fontSize: "0.75rem" }}>{c.price ? `${c.price.toFixed(2)}€` : "—"}</td>
+                      <td style={{ color: sigColor, fontWeight: 600, textTransform: "uppercase", fontSize: "0.72rem" }}>
+                        {c.error ? "⚠ erreur" : c.signal}
+                      </td>
+                      <td style={{ color: c.score > 0.3 ? GREEN : c.score < -0.3 ? RED : "var(--text-secondary)", fontSize: "0.75rem" }}>
+                        {c.score != null ? (c.score > 0 ? "+" : "") + c.score : "—"}
+                      </td>
+                      <td style={{ fontSize: "0.72rem", color: isAction ? GREEN : "var(--text-secondary)", fontWeight: isAction ? 600 : 400 }}>
+                        {c.decision || "—"}
+                      </td>
+                      <td style={{ fontSize: "0.68rem", color: "var(--text-muted)", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {c.details || c.error || ""}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
 
         <p style={{ marginTop: "2rem", fontSize: "0.7rem", color: "var(--text-muted)", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>
