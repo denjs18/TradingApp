@@ -707,9 +707,52 @@ def ai_advisor():
             advice = _json.loads(content[start:end])
         else:
             advice = {"verdict_global": content, "top_achats": [], "opportunite_marche": "faible"}
+        # Save verdict to history
+        try:
+            from database.db import get_db
+            import json as _json2
+            with get_db() as hconn:
+                hconn.execute(
+                    "INSERT INTO verdict_history (opportunite_marche, verdict_global, top_achats, conseil_dca, risques_macro, budget, max_price, nb_tickers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        advice.get("opportunite_marche"),
+                        advice.get("verdict_global"),
+                        _json2.dumps(advice.get("top_achats", []), ensure_ascii=False),
+                        advice.get("conseil_dca"),
+                        advice.get("risques_macro"),
+                        float(data.get("budget") or 0),
+                        float(data.get("max_price") or 0),
+                        len(results),
+                    )
+                )
+        except Exception:
+            pass
         return jsonify(advice)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/opportunities/verdicts", methods=["GET"])
+def get_verdict_history():
+    """Retourne l'historique des verdicts IA mensuels."""
+    get_current_user()  # auth check
+    try:
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT * FROM verdict_history ORDER BY created_at DESC LIMIT 12"
+            ).fetchall()
+        import json as _json
+        result = []
+        for r in rows:
+            row = dict(r)
+            try:
+                row["top_achats"] = _json.loads(row.get("top_achats") or "[]")
+            except Exception:
+                row["top_achats"] = []
+            result.append(row)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify([])
 
 
 @app.route("/api/ai/strategy", methods=["POST"])
