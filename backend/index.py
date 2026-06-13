@@ -618,40 +618,73 @@ def ai_advisor():
 
     data = request.get_json() or {}
     results = data.get("results", [])
+    budget = float(data.get("budget", 0))          # versement mensuel en €
+    max_price = float(data.get("max_price", 0))    # prix max par action (0 = pas de limite)
     if not results:
         return jsonify({"error": "no results"}), 400
 
-    # Préparer un résumé compact pour le prompt
-    top = sorted(results, key=lambda x: x.get("score", 0), reverse=True)[:15]
+    # Filtrer par prix max si demandé
+    if max_price > 0:
+        results = [r for r in results if r.get("current_price") and r["current_price"] <= max_price]
+
+    # Préparer un résumé compact pour le prompt — top 20 par score fondamental + global
+    top = sorted(results, key=lambda x: (x.get("fundamental_score", 0) * 0.5 + x.get("score", 0) * 0.5), reverse=True)[:20]
     lines = []
     for r in top:
+        fund = (r.get("details") or {}).get("fundamental", {}).get("fundamentals", {})
         lines.append(
-            f"- {r['ticker']} ({r.get('name','')}) : score {r.get('score',0):.1f}/10, "
-            f"recommandation={r.get('recommendation','')}, "
-            f"gain_potentiel={r.get('gain_pct') or 0:.1f}%, "
-            f"technique={r.get('technical_score',0):.2f}, "
-            f"fondamental={r.get('fundamental_score',0):.2f}, "
-            f"sentiment={r.get('sentiment_score',0):.2f}"
+            f"- {r['ticker']} ({r.get('name','')}) | cours={r.get('current_price','?')}€"
+            f" | score={r.get('score',0):.1f}/10 | recommandation={r.get('recommendation','')}"
+            f" | gain_pot={r.get('gain_pct') or 0:.1f}%"
+            f" | tech={r.get('technical_score',0):.2f} fonda={r.get('fundamental_score',0):.2f} sentiment={r.get('sentiment_score',0):.2f}"
+            f" | PE={fund.get('pe_ratio','?')} ROE={fund.get('return_on_equity','?')} div={fund.get('dividend_yield','?')} dette/cap={fund.get('debt_to_equity','?')}"
         )
     summary_text = "\n".join(lines)
 
-    prompt = f"""Tu es un conseiller en investissement PEA expérimenté. Voici les résultats d'une analyse multi-facteurs de {len(results)} actions européennes éligibles PEA.
+    budget_line = f"Budget mensuel DCA : {budget} €." if budget > 0 else ""
+    price_line = f"Contrainte : cours de l'action ≤ {max_price} €." if max_price > 0 else ""
 
-TOP 15 par score :
-{summary_text}
-
-Fournis une analyse structurée en JSON avec exactement ce format :
-{{
-  "synthese": "<3-4 phrases résumant les opportunités du moment>",
-  "top_achats": [
-    {{"ticker": "...", "raison": "<1 phrase>", "conviction": "haute|moyenne|faible"}}
-  ],
-  "secteurs_favoris": ["...", "..."],
-  "risques": "<2-3 phrases sur les risques actuels>",
-  "strategie_recommandee": "<1 paragraphe sur la stratégie PEA à adopter>"
-}}
-
-Réponds UNIQUEMENT avec le JSON, sans markdown ni texte autour."""
+    prompt = (
+        "Tu es un conseiller en investissement PEA senior, rigoureux et honnête."
+        " Tu conseilles un investisseur particulier qui fait du DCA mensuel sur son PEA, avec une vision long terme (5-10 ans)."
+        + (" " + budget_line if budget_line else "")
+        + (" " + price_line if price_line else "")
+        + "\n\nVoici les données d'analyse multi-facteurs de " + str(len(results)) + " actions éligibles PEA analysées aujourd'hui :\n\n"
+        + summary_text
+        + "\n\nTa mission : déterminer honnêtement si le moment est bon pour investir et sur quelles valeurs."
+        "\n\nRÈGLES ABSOLUES :"
+        "\n- Si AUCUNE valeur n'est vraiment attrayante aujourd'hui (scores fondamentaux faibles, valorisations tendues, risques macro), dis-le clairement. Le champ top_achats peut être une liste VIDE."
+        "\n- N'invente pas de bonnes opportunités s'il n'y en a pas. Mieux vaut garder du cash que d'acheter sans conviction."
+        "\n- Maximum 3 valeurs en top_achats. Si tu en mets 3, elles doivent vraiment le mériter."
+        "\n- Le champ 'opportunite_marche' doit refléter ta vraie lecture : 'forte', 'correcte', 'faible', ou 'attendre'."
+        "\n- Pour chaque valeur retenue, explique POURQUOI maintenant (pas seulement le score) : valorisation vs historique, contexte sectoriel, catalyseurs concrets."
+        + ("\n- Pour chaque valeur retenue, calcule combien d'actions on peut acheter avec le budget de " + str(budget) + " € et à quel prix de revient moyen approximatif." if budget > 0 else "")
+        + "\n\nFormat JSON attendu :"
+        "\n{"
+        "\n  \"opportunite_marche\": \"forte|correcte|faible|attendre\","
+        "\n  \"verdict_global\": \"<2-3 phrases franches sur l'état du marché aujourd'hui et si c'est un bon moment pour investir>\","
+        "\n  \"top_achats\": ["
+        "\n    {"
+        "\n      \"ticker\": \"...\","
+        "\n      \"nom\": \"...\","
+        "\n      \"cours\": <nombre>,"
+        "\n      \"conviction\": \"haute|moyenne\","
+        "\n      \"pourquoi_maintenant\": \"<2-3 phrases : pourquoi cette valeur EST attractive EN CE MOMENT, valorisation vs historique, contexte, catalyseur prochain>\","
+        "\n      \"these_bull\": \"<1-2 phrases : scénario haussier>\","
+        "\n      \"these_bear\": \"<1-2 phrases : ce qui pourrait mal tourner, soyez honnête>\","
+        "\n      \"ce_qui_invaliderait\": \"<1 phrase : le signal qui ferait dire stop>\","
+        "\n      \"horizon_recommande\": \"<ex: 3-5 ans>\","
+        + ("      \"nb_actions_budget\": <nombre entier d'actions achetables avec le budget>," if budget > 0 else "")
+        + "\n      \"niveau_risque\": \"faible|modéré|élevé\""
+        "\n    }"
+        "\n  ],"
+        "\n  \"message_si_vide\": \"<si top_achats est vide : explication honnête de pourquoi on attend et ce qu'on surveille>\","
+        "\n  \"secteurs_a_surveiller\": [\"...\"],"
+        "\n  \"risques_macro\": \"<2-3 phrases sur les risques de marché actuels>\","
+        "\n  \"conseil_dca\": \"<1 paragraphe : comment adapter sa stratégie DCA dans le contexte actuel>\""
+        "\n}"
+        "\n\nRéponds UNIQUEMENT avec le JSON valide, sans markdown."
+    )
 
     try:
         resp = req.post(
@@ -660,10 +693,10 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni texte autour."""
             json={
                 "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.3,
-                "max_tokens": 1200,
+                "temperature": 0.2,
+                "max_tokens": 2000,
             },
-            timeout=30,
+            timeout=40,
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
@@ -673,7 +706,7 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni texte autour."""
         if start >= 0 and end > start:
             advice = _json.loads(content[start:end])
         else:
-            advice = {"synthese": content, "top_achats": [], "secteurs_favoris": [], "risques": "", "strategie_recommandee": ""}
+            advice = {"verdict_global": content, "top_achats": [], "opportunite_marche": "faible"}
         return jsonify(advice)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
