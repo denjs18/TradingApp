@@ -203,6 +203,18 @@ def _init_sqlite():
                 default_min_score REAL DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS verdict_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                opportunite_marche TEXT,
+                verdict_global TEXT,
+                top_achats TEXT,
+                conseil_dca TEXT,
+                risques_macro TEXT,
+                budget REAL,
+                max_price REAL,
+                nb_tickers INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """
         for stmt in stmts.split(";"):
             stmt = stmt.strip()
@@ -307,6 +319,18 @@ def _init_postgres():
                 default_min_score REAL DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
+            """CREATE TABLE IF NOT EXISTS verdict_history (
+    id SERIAL PRIMARY KEY,
+    opportunite_marche TEXT,
+    verdict_global TEXT,
+    top_achats TEXT,
+    conseil_dca TEXT,
+    risques_macro TEXT,
+    budget REAL,
+    max_price REAL,
+    nb_tickers INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
         ]
         for stmt in tables:
             conn.execute(stmt)

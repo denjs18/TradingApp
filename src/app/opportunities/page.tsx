@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import type { OpportunityScore, OHLCVData, NewsItem } from "@/lib/types";
-import { analyzeOpportunities, getOpportunityScores, getMarketHistory, getOpportunityNews, getAITickerAnalysis } from "@/lib/api";
+import { analyzeOpportunities, getOpportunityScores, getMarketHistory, getOpportunityNews, getAITickerAnalysis, getDCAPositions } from "@/lib/api";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
@@ -211,6 +211,23 @@ export default function OpportunitiesPage() {
   const [loadingCached, setLoadingCached] = useState(false);
   const [aiAdvice, setAiAdvice] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [dcaPositions, setDcaPositions] = useState<Record<string, { shares: number; avg_price: number }>>({});
+  const [verdictHistory, setVerdictHistory] = useState<any[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Charger positions DCA et historique des verdicts au montage
+  useEffect(() => {
+    getDCAPositions().then((pos: any[]) => {
+      const map: Record<string, { shares: number; avg_price: number }> = {};
+      (pos || []).forEach((p: any) => { map[p.ticker] = { shares: p.shares, avg_price: p.avg_price }; });
+      setDcaPositions(map);
+    }).catch(() => {});
+
+    const token = typeof window !== "undefined" ? localStorage.getItem("trading_token") : null;
+    fetch("/api/opportunities/verdicts", {
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    }).then(r => r.json()).then(setVerdictHistory).catch(() => {});
+  }, []);
 
   const toggleSector = (sector: string) => {
     setSelectedSectors((prev) =>
@@ -666,6 +683,8 @@ export default function OpportunitiesPage() {
                     <th>Cours</th>
                     <th>Objectif</th>
                     <th>Gain Pot.</th>
+                    <th>52W</th>
+                    <th>PRU</th>
                     <th>Tech.</th>
                     <th>Fonda.</th>
                     <th>Sentiment</th>
@@ -675,10 +694,19 @@ export default function OpportunitiesPage() {
                 <tbody>
                   {filtered.map((opp) => {
                     const det = details[opp.ticker];
+                    const dca = dcaPositions[opp.ticker];
+                    const fund52 = (opp as any).details?.fundamental?.fundamentals;
+                    const pos52w = fund52?.position_52w ?? (opp as any).position_52w;
+                    const pctHigh = fund52?.pct_from_52w_high ?? (opp as any).pct_from_52w_high;
+                    const pru = dca?.avg_price;
+                    const pruPct = pru && opp.current_price ? ((opp.current_price - pru) / pru) * 100 : null;
                     return (
                       <>
-                        <tr key={opp.ticker}>
-                          <td style={{ color: GOLD, fontWeight: 600 }}>{opp.ticker}</td>
+                        <tr key={opp.ticker} style={dca ? { background: "rgba(201,168,76,0.03)" } : undefined}>
+                          <td style={{ color: GOLD, fontWeight: 600 }}>
+                            {opp.ticker}
+                            {dca && <span style={{ marginLeft: "0.3rem", fontSize: "0.58rem", color: GOLD, background: "rgba(201,168,76,0.15)", padding: "0.05rem 0.3rem", borderRadius: 2 }}>PEA</span>}
+                          </td>
                           <td style={{ fontSize: "0.72rem" }}>{opp.name || "—"}</td>
                           <td>
                             <span style={{ color: scoreColor(opp.score), fontWeight: 600 }}>
@@ -693,6 +721,33 @@ export default function OpportunitiesPage() {
                           <td>{opp.target_price ? opp.target_price.toFixed(2) : "—"}</td>
                           <td style={{ color: opp.gain_pct != null && opp.gain_pct > 0 ? GREEN : "var(--text-secondary)" }}>
                             {opp.gain_pct != null ? `${opp.gain_pct > 0 ? "+" : ""}${opp.gain_pct.toFixed(1)}%` : "—"}
+                          </td>
+                          {/* 52W position */}
+                          <td>
+                            {pos52w != null ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "0.1rem" }}>
+                                <div style={{ fontSize: "0.65rem", color: pos52w <= 30 ? GREEN : pos52w >= 75 ? RED : "var(--text-secondary)" }}>
+                                  {pos52w <= 30 ? "▼ Bas" : pos52w >= 75 ? "▲ Haut" : "◎ Mid"}
+                                </div>
+                                <div style={{ width: 48, height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
+                                  <div style={{ width: `${pos52w}%`, height: "100%", borderRadius: 2, background: pos52w <= 30 ? GREEN : pos52w >= 75 ? RED : ORANGE }} />
+                                </div>
+                                {pctHigh != null && <div style={{ fontSize: "0.6rem", color: "var(--text-muted)" }}>{pctHigh.toFixed(1)}% vs haut</div>}
+                              </div>
+                            ) : "—"}
+                          </td>
+                          {/* PRU */}
+                          <td>
+                            {pru != null ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "0.1rem" }}>
+                                <div style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>{pru.toFixed(2)} €</div>
+                                {pruPct != null && (
+                                  <div style={{ fontSize: "0.65rem", fontWeight: 600, color: pruPct >= 0 ? GREEN : RED }}>
+                                    {pruPct >= 0 ? "+" : ""}{pruPct.toFixed(1)}%
+                                  </div>
+                                )}
+                              </div>
+                            ) : <span style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>—</span>}
                           </td>
                           <td style={{ color: opp.technical_score > 0 ? GREEN : opp.technical_score < 0 ? RED : "var(--text-secondary)" }}>
                             {opp.technical_score > 0 ? "+" : ""}{opp.technical_score.toFixed(2)}
@@ -714,7 +769,7 @@ export default function OpportunitiesPage() {
                         </tr>
                         {det?.open && (
                           <tr key={`${opp.ticker}-detail`}>
-                            <td colSpan={11} style={{ padding: "1rem", background: "rgba(201,168,76,0.04)", borderTop: "1px solid var(--border)" }}>
+                            <td colSpan={13} style={{ padding: "1rem", background: "rgba(201,168,76,0.04)", borderTop: "1px solid var(--border)" }}>
                               {/* Scores */}
                               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "0.75rem", marginBottom: "1rem" }}>
                                 {[
@@ -1187,6 +1242,47 @@ export default function OpportunitiesPage() {
               );
             })}
           </>
+        )}
+
+        {/* ── HISTORIQUE DES VERDICTS ─────────────────────────── */}
+        {verdictHistory.length > 0 && (
+          <div style={{ marginTop: "2rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.75rem" }}>
+              <SectionTitle>Historique des Verdicts IA</SectionTitle>
+              <button onClick={() => setShowHistory(h => !h)} style={{ fontSize: "0.68rem", background: "none", border: "1px solid var(--border)", borderRadius: 3, padding: "0.2rem 0.6rem", color: "var(--text-muted)", cursor: "pointer" }}>
+                {showHistory ? "Masquer" : `Voir les ${verdictHistory.length} derniers verdicts`}
+              </button>
+            </div>
+            {showHistory && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                {verdictHistory.map((v: any, i: number) => {
+                  const mc = MARKET_COLORS[v.opportunite_marche] ?? GOLD;
+                  const ml = MARKET_LABELS[v.opportunite_marche] ?? v.opportunite_marche;
+                  const date = new Date(v.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+                  return (
+                    <div key={v.id ?? i} style={{ background: "var(--surface2)", border: `1px solid ${mc}33`, borderLeft: `3px solid ${mc}`, borderRadius: 4, padding: "0.75rem 1rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.4rem", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "0.68rem", fontWeight: 700, color: mc }}>{ml}</span>
+                        <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>{date}</span>
+                        {v.budget > 0 && <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>Budget : {v.budget} €</span>}
+                        {v.nb_tickers > 0 && <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>{v.nb_tickers} tickers analysés</span>}
+                        {v.top_achats?.length > 0 && (
+                          <div style={{ display: "flex", gap: "0.3rem", marginLeft: "auto", flexWrap: "wrap" }}>
+                            {v.top_achats.map((t: any) => (
+                              <span key={t.ticker} style={{ fontSize: "0.68rem", padding: "0.15rem 0.45rem", borderRadius: 3, background: "rgba(201,168,76,0.12)", color: GOLD, fontWeight: 600 }}>{t.ticker}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {v.verdict_global && (
+                        <p style={{ fontSize: "0.76rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.5, fontStyle: "italic" }}>"{v.verdict_global}"</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
 
         <p style={{ marginTop: "2rem", fontSize: "0.7rem", color: "var(--text-muted)", borderTop: "1px solid var(--border)", paddingTop: "1rem" }}>

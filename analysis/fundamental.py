@@ -75,6 +75,22 @@ def get_fundamental_data(ticker: str) -> dict:
         data["sector"] = info.get("sector")
         data["industry"] = info.get("industry")
         data["name"] = info.get("longName") or info.get("shortName")
+        # 52-week context for valuation
+        w52_high = _num(info.get("fiftyTwoWeekHigh"))
+        w52_low = _num(info.get("fiftyTwoWeekLow"))
+        current = _num(info.get("currentPrice") or info.get("regularMarketPrice"))
+        data["week52_high"] = w52_high
+        data["week52_low"] = w52_low
+        if w52_high and w52_low and w52_high > w52_low and current:
+            data["position_52w"] = round((current - w52_low) / (w52_high - w52_low) * 100, 1)
+            data["pct_from_52w_high"] = round((current - w52_high) / w52_high * 100, 1)
+            data["pct_from_52w_low"] = round((current - w52_low) / w52_low * 100, 1)
+        else:
+            data["position_52w"] = None
+            data["pct_from_52w_high"] = None
+            data["pct_from_52w_low"] = None
+        data["five_year_avg_dividend_yield"] = _num(info.get("fiveYearAvgDividendYield"))
+        data["trailing_annual_dividend_yield"] = _num(info.get("trailingAnnualDividendYield"))
     except Exception:
         pass
 
@@ -118,6 +134,18 @@ def score_valuation(fundamentals: dict) -> dict:
             scores.append(0.2); details.append(f"P/B raisonnable ({ptb:.2f})")
         else:
             scores.append(-0.3); details.append(f"P/B eleve ({ptb:.2f})")
+
+    # 52-week position bonus: near 52w low = attractive for DCA
+    pos_52w = fundamentals.get("position_52w")
+    if pos_52w is not None:
+        if pos_52w <= 20:
+            scores.append(0.6); details.append(f"Cours proche du plus bas 52 semaines ({pos_52w:.0f}% de la range) — zone d'accumulation")
+        elif pos_52w <= 40:
+            scores.append(0.2); details.append(f"Cours dans le bas de la range 52 semaines ({pos_52w:.0f}%)")
+        elif pos_52w >= 85:
+            scores.append(-0.4); details.append(f"Cours proche du plus haut 52 semaines ({pos_52w:.0f}%) — prudence")
+        elif pos_52w >= 70:
+            scores.append(-0.1); details.append(f"Cours dans le haut de la range 52 semaines ({pos_52w:.0f}%)")
 
     overall = sum(scores) / len(scores) if scores else 0.0
     return {"score": overall, "details": details}
