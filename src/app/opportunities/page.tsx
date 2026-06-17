@@ -593,9 +593,10 @@ export default function OpportunitiesPage() {
                     <th>Cours</th>
                     <th>Objectif</th>
                     <th>Gain Pot.</th>
-                    <th>Tech.</th>
-                    <th>Fonda.</th>
-                    <th>Sentiment</th>
+                    <th title="Score technique (tendance, momentum, supports)">Tendance</th>
+                    <th title="Score fondamental (qualité de l'entreprise, valorisation)">Qualité</th>
+                    <th title="Signal DCA : opportunité d'accumulation">DCA</th>
+                    <th title="Sentiment news et marché">Marché</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -627,6 +628,17 @@ export default function OpportunitiesPage() {
                           <td style={{ color: opp.fundamental_score > 0 ? GREEN : opp.fundamental_score < 0 ? RED : "var(--text-secondary)" }}>
                             {opp.fundamental_score > 0 ? "+" : ""}{opp.fundamental_score.toFixed(2)}
                           </td>
+                          <td>
+                            {opp.dca_opportunity != null ? (
+                              <span style={{
+                                fontSize: "0.68rem", fontWeight: 700, padding: "1px 5px", borderRadius: 3,
+                                background: opp.dca_opportunity >= 0.5 ? "rgba(61,158,110,0.2)" : opp.dca_opportunity <= -0.2 ? "rgba(200,72,72,0.15)" : "rgba(255,255,255,0.06)",
+                                color: opp.dca_opportunity >= 0.5 ? GREEN : opp.dca_opportunity <= -0.2 ? RED : "var(--text-muted)",
+                              }}>
+                                {opp.dca_opportunity >= 0.7 ? "Fort" : opp.dca_opportunity >= 0.5 ? "Bon" : opp.dca_opportunity >= 0.2 ? "OK" : opp.dca_opportunity <= -0.2 ? "Piège" : "—"}
+                              </span>
+                            ) : "—"}
+                          </td>
                           <td style={{ color: opp.sentiment_score > 0 ? GREEN : opp.sentiment_score < 0 ? RED : "var(--text-secondary)" }}>
                             {opp.sentiment_score > 0 ? "+" : ""}{opp.sentiment_score.toFixed(2)}
                           </td>
@@ -641,7 +653,7 @@ export default function OpportunitiesPage() {
                         </tr>
                         {det?.open && (
                           <tr key={`${opp.ticker}-detail`}>
-                            <td colSpan={11} style={{ padding: "1rem", background: "rgba(201,168,76,0.04)", borderTop: "1px solid var(--border)" }}>
+                            <td colSpan={12} style={{ padding: "1rem", background: "rgba(201,168,76,0.04)", borderTop: "1px solid var(--border)" }}>
                               {/* Scores */}
                               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "0.75rem", marginBottom: "1rem" }}>
                                 {[
@@ -908,10 +920,11 @@ export default function OpportunitiesPage() {
                         </div>
                       </div>
 
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.75rem", marginBottom: "1rem" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "0.75rem", marginBottom: "1rem" }}>
                         {[
-                          { label: "Technique", val: opp.technical_score },
-                          { label: "Fondamental", val: opp.fundamental_score },
+                          { label: "Tendance", val: opp.technical_score },
+                          { label: "Qualité", val: opp.fundamental_score },
+                          { label: "Signal DCA", val: opp.dca_opportunity },
                           { label: "Sentiment", val: opp.sentiment_score },
                           { label: "Analystes", val: opp.analyst_score },
                         ].map(({ label, val }) => (

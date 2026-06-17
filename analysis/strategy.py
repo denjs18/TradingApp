@@ -395,6 +395,9 @@ def compute_opportunity_score(ticker: str) -> dict:
         "risk_level": risk_level,
         "beta": fund.get("fundamentals", {}).get("beta"),
         "dividend_yield": fund.get("fundamentals", {}).get("dividend_yield"),
+        "dca_opportunity": fund.get("dca_opportunity", {}).get("score"),
+        "position_52w": fund.get("fundamentals", {}).get("position_52w"),
+        "pct_from_52w_high": fund.get("fundamentals", {}).get("pct_from_52w_high"),
         "trend": tech["trend"],
         "justification": " | ".join(justification_parts),
         "details": {

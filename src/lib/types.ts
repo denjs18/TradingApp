@@ -102,6 +102,9 @@ export interface OpportunityScore {
   trend: string;
   justification: string;
   computed_at?: string;
+  dca_opportunity?: number;
+  position_52w?: number | null;
+  pct_from_52w_high?: number | null;
 }
 
 export interface DCAPosition {
