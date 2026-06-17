@@ -105,6 +105,11 @@ export interface OpportunityScore {
   dca_opportunity?: number;
   position_52w?: number | null;
   pct_from_52w_high?: number | null;
+  quality_score?: number | null;
+  timing_score?: number | null;
+  roic?: number | null;
+  fcf_margin?: number | null;
+  net_debt_to_ebitda?: number | null;
 }
 
 export interface DCAPosition {

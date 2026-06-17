@@ -72,6 +72,27 @@ def get_fundamental_data(ticker: str) -> dict:
         data["five_year_avg_dividend_yield"]    = _num(info.get("fiveYearAvgDividendYield"))
         data["trailing_annual_dividend_yield"]  = _num(info.get("trailingAnnualDividendYield"))
 
+        # Nouveaux champs pour le scoring qualité long terme
+        data["roic"]               = _num(info.get("returnOnInvestedCapital"))
+        data["ebitda"]             = _num(info.get("ebitda"))
+        data["total_debt"]         = _num(info.get("totalDebt"))
+        data["cash"]               = _num(info.get("totalCash"))
+        data["shares_outstanding"] = _num(info.get("sharesOutstanding"))
+        data["revenue"]            = _num(info.get("totalRevenue"))
+
+        # Net Debt / EBITDA
+        if data["ebitda"] and data["ebitda"] > 0 and data["total_debt"] is not None and data["cash"] is not None:
+            net_debt = data["total_debt"] - data["cash"]
+            data["net_debt_to_ebitda"] = round(net_debt / data["ebitda"], 2)
+        else:
+            data["net_debt_to_ebitda"] = None
+
+        # FCF margin = FCF / Revenue
+        if data["free_cash_flow"] and data["revenue"] and data["revenue"] > 0:
+            data["fcf_margin"] = round(data["free_cash_flow"] / data["revenue"] * 100, 1)
+        else:
+            data["fcf_margin"] = None
+
     except Exception:
         pass
 
@@ -277,6 +298,17 @@ def score_profitability(fundamentals: dict) -> dict:
             scores.append(-0.4)
             details.append(f"Mauvaise utilisation de ses actifs ({roa:.1%})")
 
+    # ── Rendement du capital investi (ROIC) ────────────────────────────────
+    roic = _num(fundamentals.get("roic"))
+    if roic is not None:
+        if roic > 0.15:
+            scores.append(0.5)
+            details.append(f"Excellent ROIC ({roic:.1%}) — chaque euro investi génère beaucoup de valeur")
+        elif roic > 0.08:
+            scores.append(0.2)
+        elif roic < 0:
+            scores.append(-0.5)
+
     overall = sum(scores) / len(scores) if scores else 0.0
     return {"score": overall, "details": details}
 
@@ -442,33 +474,92 @@ def score_dca_opportunity(fundamentals: dict) -> dict:
     return {"score": overall, "details": details}
 
 
+def score_quality_longterm(fundamentals: dict) -> dict:
+    """
+    Score qualité long terme pour DCA : ROIC + FCF margin + levier financier.
+    Axe principal pour évaluer si une entreprise crée vraiment de la valeur.
+    Score sur [-1, +1].
+    """
+    scores = []
+    details = []
+
+    # ── ROIC (Rendement du Capital Investi) ────────────────────────────────
+    roic = _num(fundamentals.get("roic"))
+    if roic is not None:
+        if roic > 0.15:
+            scores.append(0.9)
+            details.append(f"Excellent rendement du capital investi ({roic:.1%}) — crée de la vraie valeur économique")
+        elif roic > 0.10:
+            scores.append(0.5)
+            details.append(f"Bon rendement du capital investi ({roic:.1%})")
+        elif roic > 0:
+            scores.append(0.1)
+        else:
+            scores.append(-0.6)
+            details.append(f"Capital détruit : rendement du capital investi négatif ({roic:.1%})")
+
+    # ── FCF Margin (Free Cash Flow / Chiffre d'affaires) ──────────────────
+    fcf_margin = _num(fundamentals.get("fcf_margin"))
+    if fcf_margin is not None:
+        if fcf_margin > 15:
+            scores.append(0.8)
+            details.append(f"Très forte conversion en cash : {fcf_margin:.1f}% du CA devient du cash libre")
+        elif fcf_margin > 8:
+            scores.append(0.4)
+        elif fcf_margin > 0:
+            scores.append(0.1)
+        else:
+            scores.append(-0.5)
+
+    # ── Net Debt / EBITDA (levier financier) ──────────────────────────────
+    nd = _num(fundamentals.get("net_debt_to_ebitda"))
+    if nd is not None:
+        if nd < 0:
+            scores.append(0.5)
+            details.append("Plus de cash que de dettes — bilan forteresse")
+        elif nd <= 1.5:
+            scores.append(0.2)
+        elif nd <= 3.0:
+            scores.append(0.0)
+        elif nd <= 5.0:
+            scores.append(-0.3)
+        else:
+            scores.append(-0.7)
+            details.append(f"Dette très lourde ({nd:.1f}x EBITDA) — risque financier majeur")
+
+    overall = sum(scores) / len(scores) if scores else 0.0
+    return {"score": round(overall, 3), "details": details}
+
+
 def get_fundamental_summary(ticker: str) -> dict:
     fundamentals = get_fundamental_data(ticker)
 
-    valuation    = score_valuation(fundamentals)
-    profitability= score_profitability(fundamentals)
-    growth       = score_growth(fundamentals)
-    health       = score_financial_health(fundamentals)
-    dca_opp      = score_dca_opportunity(fundamentals)
+    valuation       = score_valuation(fundamentals)
+    profitability   = score_profitability(fundamentals)
+    growth          = score_growth(fundamentals)
+    health          = score_financial_health(fundamentals)
+    dca_opp         = score_dca_opportunity(fundamentals)
+    quality_longterm = score_quality_longterm(fundamentals)
 
-    # Pondérations adaptées au DCA long terme :
-    # - La valorisation (est-ce bon marché ?) est primordiale
-    # - La qualité (rentabilité + santé) compte beaucoup
-    # - La croissance compte mais moins que la qualité pour un DCA
-    # - L'opportunité DCA spécifique a un bonus distinct
+    # Pondérations qualité-first pour DCA long terme :
+    # - La qualité long terme (ROIC, FCF margin, levier) est l'axe principal
+    # - La valorisation compte beaucoup aussi
+    # - Rentabilité, croissance, santé et timing DCA sont secondaires
     weights = {
-        "valuation":     0.28,
-        "profitability": 0.23,
-        "growth":        0.20,
-        "health":        0.17,
-        "dca_opportunity": 0.12,
+        "quality_longterm": 0.30,  # NEW: ROIC, FCF margin, net debt/EBITDA
+        "valuation":        0.25,
+        "profitability":    0.18,
+        "growth":           0.15,
+        "health":           0.07,
+        "dca_opportunity":  0.05,
     }
     sub_scores = {
-        "valuation":      valuation["score"],
-        "profitability":  profitability["score"],
-        "growth":         growth["score"],
-        "health":         health["score"],
-        "dca_opportunity": dca_opp["score"],
+        "quality_longterm": quality_longterm["score"],
+        "valuation":        valuation["score"],
+        "profitability":    profitability["score"],
+        "growth":           growth["score"],
+        "health":           health["score"],
+        "dca_opportunity":  dca_opp["score"],
     }
     overall = sum(sub_scores[k] * weights[k] for k in weights)
 
@@ -482,18 +573,21 @@ def get_fundamental_summary(ticker: str) -> dict:
         }
 
     return {
-        "name":          fundamentals.get("name"),
-        "sector":        fundamentals.get("sector"),
-        "industry":      fundamentals.get("industry"),
-        "market_cap":    fundamentals.get("market_cap"),
-        "beta":          fundamentals.get("beta"),
-        "valuation":     valuation,
-        "profitability": profitability,
-        "growth":        growth,
-        "health":        health,
-        "dca_opportunity": dca_opp,
-        "dividend":      dividend_info,
-        "overall_score": overall,
-        "fundamentals":  fundamentals,
-        "raw_data":      fundamentals,
+        "name":             fundamentals.get("name"),
+        "sector":           fundamentals.get("sector"),
+        "industry":         fundamentals.get("industry"),
+        "market_cap":       fundamentals.get("market_cap"),
+        "beta":             fundamentals.get("beta"),
+        "valuation":        valuation,
+        "profitability":    profitability,
+        "growth":           growth,
+        "health":           health,
+        "dca_opportunity":  dca_opp,
+        "quality_longterm": quality_longterm,
+        "dividend":         dividend_info,
+        "overall_score":    overall,
+        "quality_score":    quality_longterm["score"],  # [-1, +1]
+        "timing_score":     dca_opp["score"],           # [-1, +1]
+        "fundamentals":     fundamentals,
+        "raw_data":         fundamentals,
     }

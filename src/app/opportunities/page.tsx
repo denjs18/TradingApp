@@ -594,8 +594,8 @@ export default function OpportunitiesPage() {
                     <th>Objectif</th>
                     <th>Gain Pot.</th>
                     <th title="Score technique (tendance, momentum, supports)">Tendance</th>
-                    <th title="Score fondamental (qualité de l'entreprise, valorisation)">Qualité</th>
-                    <th title="Signal DCA : opportunité d'accumulation">DCA</th>
+                    <th title="Score fondamental (qualité de l'entreprise, valorisation)">Qualité LT</th>
+                    <th title="Timing DCA : opportunité d'accumulation">Timing</th>
                     <th title="Sentiment news et marché">Marché</th>
                     <th></th>
                   </tr>
@@ -625,17 +625,17 @@ export default function OpportunitiesPage() {
                           <td style={{ color: opp.technical_score > 0 ? GREEN : opp.technical_score < 0 ? RED : "var(--text-secondary)" }}>
                             {opp.technical_score > 0 ? "+" : ""}{opp.technical_score.toFixed(2)}
                           </td>
-                          <td style={{ color: opp.fundamental_score > 0 ? GREEN : opp.fundamental_score < 0 ? RED : "var(--text-secondary)" }}>
-                            {opp.fundamental_score > 0 ? "+" : ""}{opp.fundamental_score.toFixed(2)}
+                          <td style={{ color: opp.quality_score != null && opp.quality_score > 0.3 ? GREEN : opp.quality_score != null && opp.quality_score < -0.1 ? RED : GOLD }}>
+                            {opp.quality_score != null ? `${opp.quality_score > 0 ? "+" : ""}${opp.quality_score.toFixed(2)}` : "N/A"}
                           </td>
                           <td>
-                            {opp.dca_opportunity != null ? (
+                            {opp.timing_score != null ? (
                               <span style={{
                                 fontSize: "0.68rem", fontWeight: 700, padding: "1px 5px", borderRadius: 3,
-                                background: opp.dca_opportunity >= 0.5 ? "rgba(61,158,110,0.2)" : opp.dca_opportunity <= -0.2 ? "rgba(200,72,72,0.15)" : "rgba(255,255,255,0.06)",
-                                color: opp.dca_opportunity >= 0.5 ? GREEN : opp.dca_opportunity <= -0.2 ? RED : "var(--text-muted)",
+                                background: opp.timing_score >= 0.5 ? "rgba(61,158,110,0.2)" : opp.timing_score <= -0.2 ? "rgba(200,72,72,0.15)" : "rgba(255,255,255,0.06)",
+                                color: opp.timing_score >= 0.5 ? GREEN : opp.timing_score <= -0.2 ? RED : "var(--text-muted)",
                               }}>
-                                {opp.dca_opportunity >= 0.7 ? "Fort" : opp.dca_opportunity >= 0.5 ? "Bon" : opp.dca_opportunity >= 0.2 ? "OK" : opp.dca_opportunity <= -0.2 ? "Piège" : "—"}
+                                {opp.timing_score >= 0.7 ? "Fort" : opp.timing_score >= 0.5 ? "Bon" : opp.timing_score >= 0.2 ? "OK" : opp.timing_score <= -0.2 ? "Piège" : "—"}
                               </span>
                             ) : "—"}
                           </td>
@@ -920,22 +920,55 @@ export default function OpportunitiesPage() {
                         </div>
                       </div>
 
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "0.75rem", marginBottom: "1rem" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "0.75rem", marginBottom: "0.5rem" }}>
                         {[
                           { label: "Tendance", val: opp.technical_score },
-                          { label: "Qualité", val: opp.fundamental_score },
-                          { label: "Signal DCA", val: opp.dca_opportunity },
+                          { label: "Qualité LT", val: opp.quality_score },
+                          { label: "Timing DCA", val: opp.timing_score },
                           { label: "Sentiment", val: opp.sentiment_score },
                           { label: "Analystes", val: opp.analyst_score },
                         ].map(({ label, val }) => (
                           <div key={label} className="metric-card">
                             <div className="metric-label">{label}</div>
-                            <div className="metric-value" style={{ color: val > 0 ? GREEN : val < 0 ? RED : "var(--text-secondary)" }}>
+                            <div className="metric-value" style={{ color: val != null && val > 0 ? GREEN : val != null && val < 0 ? RED : "var(--text-secondary)" }}>
                               {val != null ? `${val > 0 ? "+" : ""}${val.toFixed(2)}` : "—"}
                             </div>
                           </div>
                         ))}
                       </div>
+                      <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginBottom: "1rem", fontStyle: "italic" }}>
+                        Le technique pèse moins en DCA (1.5/10 pts vs 5.5/10 pour le fondamental)
+                      </div>
+
+                      {/* Métriques qualité long terme */}
+                      {(opp.roic != null || opp.fcf_margin != null || opp.net_debt_to_ebitda != null) && (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "0.5rem", marginBottom: "1rem" }}>
+                          {opp.roic != null && (
+                            <div className="metric-card">
+                              <div className="metric-label">ROIC</div>
+                              <div className="metric-value" style={{ color: opp.roic > 0.15 ? GREEN : opp.roic < 0 ? RED : "var(--text-primary)", fontSize: "0.85rem" }}>
+                                {(opp.roic * 100).toFixed(1)}%
+                              </div>
+                            </div>
+                          )}
+                          {opp.fcf_margin != null && (
+                            <div className="metric-card">
+                              <div className="metric-label">Marge FCF</div>
+                              <div className="metric-value" style={{ color: opp.fcf_margin > 15 ? GREEN : opp.fcf_margin < 0 ? RED : "var(--text-primary)", fontSize: "0.85rem" }}>
+                                {opp.fcf_margin.toFixed(1)}%
+                              </div>
+                            </div>
+                          )}
+                          {opp.net_debt_to_ebitda != null && (
+                            <div className="metric-card">
+                              <div className="metric-label">Dette nette / EBITDA</div>
+                              <div className="metric-value" style={{ color: opp.net_debt_to_ebitda < 0 ? GREEN : opp.net_debt_to_ebitda > 5 ? RED : "var(--text-primary)", fontSize: "0.85rem" }}>
+                                {opp.net_debt_to_ebitda.toFixed(1)}x
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                               {/* Métriques de risque */}
                               {((opp as any).volatility_annual != null || (opp as any).max_drawdown != null) && (
