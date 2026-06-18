@@ -48,3 +48,4 @@ npm-debug.log*
 .vercel/
 .claude/worktrees/
 .claude/
+*.tsbuildinfo
