@@ -1016,6 +1016,8 @@ export default function PortfolioPage() {
               return `${m.year}-${String(mn).padStart(2,"0")}`;
             });
 
+            // Prix le plus récent connu par instrument (reporté si un mois manque)
+            const lastKnownPrice: Record<string, number> = {};
             months.forEach((m, i) => {
               cumulInvested += m.total_invested_month;
               cumulInvestedArr.push(Math.round(cumulInvested));
@@ -1025,12 +1027,13 @@ export default function PortfolioPage() {
                 const instData = m.instruments[inst.name];
                 if (!instData || !instData.qty_total) continue;
                 const key = monthKeys[i];
-                const price = peaHistPrices?.[inst.name]?.[key];
+                // Priorité : prix marché du mois → prix d'achat du mois → dernier prix connu
+                const price = peaHistPrices?.[inst.name]?.[key]
+                  || instData.prix
+                  || lastKnownPrice[inst.name];
                 if (price) {
+                  lastKnownPrice[inst.name] = price;
                   val += instData.qty_total * price;
-                } else if (instData.prix) {
-                  // Fallback: use buy price
-                  val += instData.qty_total * instData.prix;
                 }
               }
               marketValueArr.push(Math.round(val));
@@ -1055,21 +1058,25 @@ export default function PortfolioPage() {
             // ── Chart 4 : Évolution allocation (stacked area) ──
             const stackTraces = instruments
               .filter(inst => months.some(m => (m.instruments[inst.name]?.qty_total || 0) > 0))
-              .map(inst => ({
+              .map(inst => {
+                let lastPx = 0;
+                return {
                 name: inst.name,
                 x: monthLabels,
                 y: months.map((m, i) => {
                   const instData = m.instruments[inst.name];
                   if (!instData?.qty_total) return 0;
                   const key = monthKeys[i];
-                  const price = peaHistPrices?.[inst.name]?.[key] || instData.prix || 0;
+                  const price = peaHistPrices?.[inst.name]?.[key] || instData.prix || lastPx;
+                  if (price) lastPx = price;
                   return Math.round(instData.qty_total * price);
                 }),
                 type: "scatter" as const,
                 mode: "lines" as const,
                 stackgroup: "one",
                 fill: "tonexty" as const,
-              }));
+              };
+              });
 
             const plotLayout: any = {
               paper_bgcolor: "transparent", plot_bgcolor: "transparent",
