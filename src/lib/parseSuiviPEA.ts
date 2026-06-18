@@ -134,6 +134,65 @@ function parseInstrumentBlock(
   }
 }
 
+// ── Onglet "Résumé" : valeurs réelles faisant foi ──────────────────────
+// Colonnes AM = "PEA" (valeur réelle), AN = "Investi" (montant investi réel)
+export interface PEAResumePoint {
+  date: string;
+  value: number;     // valeur réelle du portefeuille PEA ce mois-là
+  invested: number;  // montant réellement investi (cumulé)
+}
+
+const MONTHS_FR_SHORT = ["jan", "fév", "mar", "avr", "mai", "juin",
+  "juil", "aoû", "sep", "oct", "nov", "déc"];
+
+function fmtResumeDate(v: unknown, idx: number): string {
+  if (v instanceof Date) return `${MONTHS_FR_SHORT[v.getMonth()]} ${v.getFullYear()}`;
+  const n = toNum(v);
+  if (n && n > 30000) { // numéro de série Excel
+    const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
+    return `${MONTHS_FR_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+  }
+  return String(v ?? idx + 1);
+}
+
+export function parseResume(rows: unknown[][]): PEAResumePoint[] {
+  // Repérer la cellule d'en-tête "PEA" suivie de "Investi"
+  let peaCol = -1, invCol = -1, headerRow = -1;
+  for (let r = 0; r < rows.length && peaCol < 0; r++) {
+    const row = (rows[r] as unknown[]) || [];
+    for (let c = 0; c < row.length; c++) {
+      if (String(row[c]).trim() === "PEA" && String(row[c + 1]).trim() === "Investi") {
+        peaCol = c; invCol = c + 1; headerRow = r; break;
+      }
+    }
+  }
+  if (peaCol < 0) return [];
+
+  // Colonne date : chercher l'en-tête "Temps", sinon colonne B (index 1)
+  let dateCol = 1;
+  const hdr = (rows[headerRow] as unknown[]) || [];
+  for (let c = 0; c < hdr.length; c++) {
+    if (String(hdr[c]).trim().toLowerCase() === "temps") { dateCol = c; break; }
+  }
+
+  const points: PEAResumePoint[] = [];
+  for (let r = headerRow + 1; r < rows.length; r++) {
+    const row = (rows[r] as unknown[]) || [];
+    const v = toNum(row[peaCol]);
+    const inv = toNum(row[invCol]);
+    if (v == null && inv == null) {
+      if (points.length) break; // fin du tableau
+      continue;
+    }
+    points.push({
+      date: fmtResumeDate(row[dateCol], points.length),
+      value: v ?? 0,
+      invested: inv ?? 0,
+    });
+  }
+  return points;
+}
+
 export function parseSuiviPEA(rows: unknown[][]): PEAData {
   if (rows.length < 5) return { instruments: [], months: [], current: {} };
 

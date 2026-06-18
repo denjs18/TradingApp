@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { parseSuiviPEA, type PEAData } from "@/lib/parseSuiviPEA";
+import { parseSuiviPEA, parseResume, type PEAData, type PEAResumePoint } from "@/lib/parseSuiviPEA";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
@@ -148,6 +148,7 @@ export default function PortfolioPage() {
 
   // Suivi PEA historique
   const [peaData, setPeaData] = useState<PEAData | null>(null);
+  const [peaResume, setPeaResume] = useState<PEAResumePoint[] | null>(null);
   const [peaLoading, setPeaLoading] = useState(false);
   const [peaHistPrices, setPeaHistPrices] = useState<Record<string, Record<string, number>> | null>(null);
   const peaFileRef = useRef<HTMLInputElement>(null);
@@ -210,12 +211,21 @@ export default function PortfolioPage() {
     try {
       const XLSX = await import("xlsx");
       const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer, { type: "array" });
+      const wb = XLSX.read(buffer, { type: "array", cellDates: true });
       const sheet = wb.Sheets["Suivi PEA"];
       if (!sheet) { alert('Onglet "Suivi PEA" introuvable dans le fichier.'); return; }
       const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null });
       const parsed = parseSuiviPEA(rows);
       setPeaData(parsed);
+
+      // Onglet "Résumé" : valeurs réelles (colonnes PEA / Investi) faisant foi
+      const resumeSheet = wb.Sheets["Résumé"] || wb.Sheets["Resume"];
+      if (resumeSheet) {
+        const resumeRows = XLSX.utils.sheet_to_json<unknown[]>(resumeSheet, { header: 1, defval: null });
+        setPeaResume(parseResume(resumeRows));
+      } else {
+        setPeaResume(null);
+      }
 
       // Fetch historical prices from backend
       const instruments = parsed.instruments
@@ -1040,8 +1050,21 @@ export default function PortfolioPage() {
             });
 
             const lastMonth = months[months.length - 1];
-            const totalInvested = cumulInvestedArr[cumulInvestedArr.length - 1];
-            const totalMarket = marketValueArr[marketValueArr.length - 1];
+
+            // ── Source de vérité : onglet "Résumé" (colonnes PEA / Investi) ──
+            // Si dispo, on l'utilise pour la courbe et les KPIs (valeurs réelles,
+            // pas la reconstruction qté×cours qui surestime).
+            const useResume = !!(peaResume && peaResume.length > 0);
+            const perfLabels = useResume ? peaResume!.map(p => p.date) : monthLabels;
+            const perfInvested = useResume
+              ? peaResume!.map(p => Math.round(p.invested))
+              : cumulInvestedArr;
+            const perfValue = useResume
+              ? peaResume!.map(p => Math.round(p.value))
+              : marketValueArr;
+
+            const totalInvested = perfInvested[perfInvested.length - 1];
+            const totalMarket = perfValue[perfValue.length - 1];
             const perfPct = totalInvested > 0 ? ((totalMarket - totalInvested) / totalInvested * 100) : 0;
 
             // ── Chart 3 : Allocation actuelle par instrument (pie) ──
@@ -1095,9 +1118,9 @@ export default function PortfolioPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "0.75rem", marginBottom: "1.5rem" }}>
                   {[
                     { label: "Total investi", val: `${totalInvested.toLocaleString("fr-FR")} €`, color: GOLD },
-                    { label: "Valeur estimée", val: `${totalMarket.toLocaleString("fr-FR")} €`, color: totalMarket > totalInvested ? GREEN : RED },
+                    { label: useResume ? "Valeur PEA" : "Valeur estimée", val: `${totalMarket.toLocaleString("fr-FR")} €`, color: totalMarket > totalInvested ? GREEN : RED },
                     { label: "Performance", val: `${perfPct > 0 ? "+" : ""}${perfPct.toFixed(1)}%`, color: perfPct >= 0 ? GREEN : RED },
-                    { label: "Nb mois de DCA", val: `${months.length} mois`, color: "var(--text-primary)" },
+                    { label: "Nb mois de DCA", val: `${(useResume ? perfLabels.length : months.length)} mois`, color: "var(--text-primary)" },
                     { label: "Instruments", val: `${instruments.length}`, color: "var(--text-primary)" },
                   ].map(({ label, val, color }) => (
                     <div key={label} className="metric-card">
@@ -1114,20 +1137,22 @@ export default function PortfolioPage() {
                   <div className="card" style={{ gridColumn: "1 / -1" }}>
                     <div style={{ fontSize: "0.8rem", fontWeight: 600, color: GOLD, marginBottom: "0.5rem" }}>
                       Performance vs Montant investi
-                      {!peaHistPrices && <span style={{ color: "#8892a4", fontWeight: 400, fontSize: "0.7rem", marginLeft: "0.5rem" }}>(prix d'achat en attendant les données marché…)</span>}
+                      {useResume
+                        ? <span style={{ color: "#8892a4", fontWeight: 400, fontSize: "0.7rem", marginLeft: "0.5rem" }}>(valeurs réelles — onglet Résumé)</span>
+                        : !peaHistPrices && <span style={{ color: "#8892a4", fontWeight: 400, fontSize: "0.7rem", marginLeft: "0.5rem" }}>(prix d'achat en attendant les données marché…)</span>}
                     </div>
                     <Plot
                       data={[
                         {
                           name: "Montant investi cumulé",
-                          x: monthLabels, y: cumulInvestedArr,
+                          x: perfLabels, y: perfInvested,
                           type: "scatter", mode: "lines",
                           line: { color: GOLD, width: 2, dash: "dot" },
                           fill: "none",
                         },
                         {
-                          name: "Valeur portefeuille estimée",
-                          x: monthLabels, y: marketValueArr,
+                          name: useResume ? "Valeur portefeuille" : "Valeur portefeuille estimée",
+                          x: perfLabels, y: perfValue,
                           type: "scatter", mode: "lines",
                           line: { color: GREEN, width: 2.5 },
                           fill: "tonexty",
