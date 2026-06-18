@@ -1104,6 +1104,36 @@ Réponds EN JSON avec cette structure exacte :
     }))
 
 
+@app.route("/api/portfolio/historical-prices", methods=["POST"])
+def portfolio_historical_prices():
+    """Récupère les prix mensuels historiques pour chaque instrument du Suivi PEA."""
+    data = request.get_json()
+    instruments = data.get("instruments", [])  # [{name, ticker}]
+    period = data.get("period", "3y")
+
+    import yfinance as yf
+
+    results = {}
+    for inst in instruments:
+        ticker = inst.get("ticker")
+        name   = inst.get("name", ticker)
+        if not ticker:
+            results[name] = {}
+            continue
+        try:
+            hist = yf.Ticker(ticker).history(period=period, interval="1mo")
+            monthly = {}
+            for dt, row in hist.iterrows():
+                key = f"{dt.year}-{int(dt.month):02d}"
+                monthly[key] = round(float(row["Close"]), 4)
+            results[name] = monthly
+        except Exception:
+            results[name] = {}
+
+    return jsonify(sanitize(results))
+
+
+
 # ── Cron (remplace APScheduler) ───────────────────────────────
 
 ALL_PEA_TICKERS = [

@@ -398,8 +398,9 @@ def get_fundamental_summary(ticker: str) -> dict:
     }
     overall = sum(sub_scores[k] * weights[k] for k in weights)
 
-    red_flags = compute_red_flags(fundamentals)
-    quality_grade = compute_quality_grade(overall)
+    is_etf = fundamentals.get("is_etf", False)
+    red_flags = [] if is_etf else compute_red_flags(fundamentals)
+    quality_grade = None if is_etf else compute_quality_grade(overall)
 
     # Dividende
     dividend_info = None
