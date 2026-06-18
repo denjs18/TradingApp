@@ -274,10 +274,11 @@ def compute_opportunity_score(ticker: str) -> dict:
     analyst = get_analyst_recommendations(ticker)
     targets = get_analyst_price_targets(ticker)
 
-    # Scoring (chaque composante sur [-2.5, +2.5], total sur [-10, +10])
-    tech_score = tech["overall_score"] * 2.5  # [-2.5, +2.5]
-    fund_score = fund["overall_score"] * 2.5  # [-2.5, +2.5]
-    sent_score = sentiment["overall_score"] * 2.5  # [-2.5, +2.5]
+    # Scoring DCA-first : le fondamental domine, le technique est un signal mineur
+    # fund×5.5 + tech×1.5 + sent×1.0 + analyst~2.5 → total sur [-10, +10]
+    tech_score = tech["overall_score"] * 1.5    # mineur : signal de timing
+    fund_score = fund["overall_score"] * 5.5    # dominant : qualité drive l'alpha
+    sent_score = sentiment["overall_score"] * 1.0  # secondaire : réducteur de bruit
 
     # Score analyste
     analyst_score = 0.0
@@ -395,6 +396,19 @@ def compute_opportunity_score(ticker: str) -> dict:
         "risk_level": risk_level,
         "beta": fund.get("fundamentals", {}).get("beta"),
         "dividend_yield": fund.get("fundamentals", {}).get("dividend_yield"),
+
+        "dca_opportunity": fund.get("dca_opportunity", {}).get("score"),
+        "position_52w": fund.get("fundamentals", {}).get("position_52w"),
+        "pct_from_52w_high": fund.get("fundamentals", {}).get("pct_from_52w_high"),
+        "quality_score": fund.get("quality_score"),        # long-term quality [-1,+1]
+        "timing_score": fund.get("timing_score"),          # DCA timing [-1,+1]
+        "roic": fund.get("fundamentals", {}).get("roic"),
+        "fcf_margin": fund.get("fundamentals", {}).get("fcf_margin"),
+        "net_debt_to_ebitda": fund.get("fundamentals", {}).get("net_debt_to_ebitda"),
+        "red_flags": fund.get("red_flags", []),
+        "quality_grade": fund.get("quality_grade", "—"),
+        "interest_coverage": fund.get("fundamentals", {}).get("interest_coverage"),
+        "ev_to_fcf": fund.get("fundamentals", {}).get("ev_to_fcf"),
         "trend": tech["trend"],
         "justification": " | ".join(justification_parts),
         "details": {

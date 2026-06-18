@@ -706,6 +706,19 @@ export default function OpportunitiesPage() {
                           <td style={{ color: GOLD, fontWeight: 600 }}>
                             {opp.ticker}
                             {dca && <span style={{ marginLeft: "0.3rem", fontSize: "0.58rem", color: GOLD, background: "rgba(201,168,76,0.15)", padding: "0.05rem 0.3rem", borderRadius: 2 }}>PEA</span>}
+                            {opp.quality_grade && (
+                              <span style={{
+                                marginLeft: 4, fontSize: "0.6rem", fontWeight: 700,
+                                padding: "1px 4px", borderRadius: 3,
+                                background: opp.quality_grade === "A" ? "rgba(61,158,110,0.25)" :
+                                            opp.quality_grade === "B" ? "rgba(61,158,110,0.12)" :
+                                            opp.quality_grade === "F" ? "rgba(200,72,72,0.25)" :
+                                            "rgba(255,255,255,0.08)",
+                                color: opp.quality_grade === "A" ? GREEN :
+                                       opp.quality_grade === "B" ? GREEN :
+                                       opp.quality_grade === "F" ? RED : "var(--text-muted)",
+                              }}>{opp.quality_grade}</span>
+                            )}
                           </td>
                           <td style={{ fontSize: "0.72rem" }}>{opp.name || "—"}</td>
                           <td>
@@ -799,6 +812,18 @@ export default function OpportunitiesPage() {
                                       <div className="metric-label">{label}</div>
                                       <div className="metric-value" style={{ color: warn ? RED : "var(--text-primary)", fontSize: "0.85rem" }}>{val}</div>
                                     </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {(opp as any).red_flags && (opp as any).red_flags.length > 0 && (
+                                <div style={{ marginBottom: "1rem" }}>
+                                  {((opp as any).red_flags as string[]).map((flag: string, i: number) => (
+                                    <div key={i} style={{
+                                      fontSize: "0.76rem", padding: "0.4rem 0.75rem", marginBottom: "0.3rem",
+                                      borderRadius: 4, background: "rgba(200,72,72,0.1)",
+                                      borderLeft: "3px solid rgba(200,72,72,0.6)", color: "var(--text-primary)"
+                                    }}>{flag}</div>
                                   ))}
                                 </div>
                               )}
@@ -1065,6 +1090,39 @@ export default function OpportunitiesPage() {
                                       <div className="metric-label">{label}</div>
                                       <div className="metric-value" style={{ color: warn ? RED : "var(--text-primary)", fontSize: "0.85rem" }}>{val}</div>
                                     </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {((opp as any).ev_to_fcf != null || (opp as any).interest_coverage != null) && (
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "0.5rem", marginBottom: "1rem" }}>
+                                  {(opp as any).ev_to_fcf != null && (
+                                    <div className="metric-card">
+                                      <div className="metric-label">EV/FCF</div>
+                                      <div className="metric-value" style={{ fontSize: "0.85rem", color: (opp as any).ev_to_fcf < 15 ? GREEN : (opp as any).ev_to_fcf > 35 ? RED : "var(--text-primary)" }}>
+                                        {(opp as any).ev_to_fcf}x
+                                      </div>
+                                    </div>
+                                  )}
+                                  {(opp as any).interest_coverage != null && (
+                                    <div className="metric-card">
+                                      <div className="metric-label">Couv. intérêts</div>
+                                      <div className="metric-value" style={{ fontSize: "0.85rem", color: (opp as any).interest_coverage > 5 ? GREEN : (opp as any).interest_coverage < 2 ? RED : "var(--text-primary)" }}>
+                                        {(opp as any).interest_coverage}x
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {(opp as any).red_flags && (opp as any).red_flags.length > 0 && (
+                                <div style={{ marginBottom: "1rem" }}>
+                                  {((opp as any).red_flags as string[]).map((flag: string, i: number) => (
+                                    <div key={i} style={{
+                                      fontSize: "0.76rem", padding: "0.4rem 0.75rem", marginBottom: "0.3rem",
+                                      borderRadius: 4, background: "rgba(200,72,72,0.1)",
+                                      borderLeft: "3px solid rgba(200,72,72,0.6)", color: "var(--text-primary)"
+                                    }}>{flag}</div>
                                   ))}
                                 </div>
                               )}
