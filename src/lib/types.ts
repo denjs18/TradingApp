@@ -111,7 +111,8 @@ export interface OpportunityScore {
   fcf_margin?: number | null;
   net_debt_to_ebitda?: number | null;
   red_flags?: string[];
-  quality_grade?: string;
+  quality_grade?: string | null;
+  is_etf?: boolean;
   interest_coverage?: number | null;
   ev_to_fcf?: number | null;
 }

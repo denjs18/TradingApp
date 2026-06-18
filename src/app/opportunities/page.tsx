@@ -706,7 +706,7 @@ export default function OpportunitiesPage() {
                           <td style={{ color: GOLD, fontWeight: 600 }}>
                             {opp.ticker}
                             {dca && <span style={{ marginLeft: "0.3rem", fontSize: "0.58rem", color: GOLD, background: "rgba(201,168,76,0.15)", padding: "0.05rem 0.3rem", borderRadius: 2 }}>PEA</span>}
-                            {opp.quality_grade && (
+                            {opp.quality_grade && !((opp as any).is_etf) && (
                               <span style={{
                                 marginLeft: 4, fontSize: "0.6rem", fontWeight: 700,
                                 padding: "1px 4px", borderRadius: 3,

@@ -110,6 +110,7 @@ def get_fundamental_data(ticker: str) -> dict:
             data["pct_from_52w_low"] = None
         data["five_year_avg_dividend_yield"] = _num(info.get("fiveYearAvgDividendYield"))
         data["trailing_annual_dividend_yield"] = _num(info.get("trailingAnnualDividendYield"))
+        data["is_etf"] = info.get("quoteType", "").upper() in ("ETF", "MUTUALFUND")
 
         data["ebit"]             = _num(info.get("ebit"))
         data["interest_expense"] = _num(info.get("interestExpense"))
@@ -398,8 +399,9 @@ def get_fundamental_summary(ticker: str) -> dict:
     }
     overall = sum(sub_scores[k] * weights[k] for k in weights)
 
-    red_flags = compute_red_flags(fundamentals)
-    quality_grade = compute_quality_grade(overall)
+    is_etf = fundamentals.get("is_etf", False)
+    red_flags = [] if is_etf else compute_red_flags(fundamentals)
+    quality_grade = None if is_etf else compute_quality_grade(quality_longterm["score"])
 
     # Dividende
     dividend_info = None
@@ -425,5 +427,6 @@ def get_fundamental_summary(ticker: str) -> dict:
         "raw_data": fundamentals,
         "red_flags": red_flags,
         "quality_grade": quality_grade,
+        "is_etf": is_etf,
         "fundamentals": fundamentals,
     }

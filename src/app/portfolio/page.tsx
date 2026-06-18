@@ -635,7 +635,16 @@ export default function PortfolioPage() {
                           </div>
                         )}
                       </div>
-                      {grade && (
+                      {p.is_etf && (
+                        <span style={{
+                          padding: "0.2rem 0.5rem", borderRadius: 5,
+                          fontSize: "0.72rem", fontWeight: 700,
+                          background: "rgba(100,120,200,0.15)",
+                          color: "#7b8fcf",
+                          border: "1px solid rgba(100,120,200,0.3)",
+                        }}>ETF</span>
+                      )}
+                      {grade && !p.is_etf && (
                         <span
                           style={{
                             padding: "0.2rem 0.5rem",
