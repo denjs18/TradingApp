@@ -396,6 +396,7 @@ def compute_opportunity_score(ticker: str) -> dict:
         "risk_level": risk_level,
         "beta": fund.get("fundamentals", {}).get("beta"),
         "dividend_yield": fund.get("fundamentals", {}).get("dividend_yield"),
+
         "dca_opportunity": fund.get("dca_opportunity", {}).get("score"),
         "position_52w": fund.get("fundamentals", {}).get("position_52w"),
         "pct_from_52w_high": fund.get("fundamentals", {}).get("pct_from_52w_high"),
@@ -404,6 +405,10 @@ def compute_opportunity_score(ticker: str) -> dict:
         "roic": fund.get("fundamentals", {}).get("roic"),
         "fcf_margin": fund.get("fundamentals", {}).get("fcf_margin"),
         "net_debt_to_ebitda": fund.get("fundamentals", {}).get("net_debt_to_ebitda"),
+        "red_flags": fund.get("red_flags", []),
+        "quality_grade": fund.get("quality_grade", "—"),
+        "interest_coverage": fund.get("fundamentals", {}).get("interest_coverage"),
+        "ev_to_fcf": fund.get("fundamentals", {}).get("ev_to_fcf"),
         "trend": tech["trend"],
         "justification": " | ".join(justification_parts),
         "details": {

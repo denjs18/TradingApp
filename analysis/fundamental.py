@@ -4,6 +4,24 @@ import yfinance as yf
 from typing import Optional
 
 
+# Médianes sectorielles pour normaliser les ratios
+# Source: moyennes historiques par secteur (ordre de grandeur)
+SECTOR_MEDIANS = {
+    "Technology":             {"pe": 28, "pb": 5.0, "roe": 0.20, "debt_eq": 40,  "pm": 0.18},
+    "Financial Services":     {"pe": 12, "pb": 1.2, "roe": 0.12, "debt_eq": 200, "pm": 0.22},
+    "Healthcare":             {"pe": 22, "pb": 3.5, "roe": 0.15, "debt_eq": 60,  "pm": 0.12},
+    "Consumer Cyclical":      {"pe": 18, "pb": 2.5, "roe": 0.14, "debt_eq": 80,  "pm": 0.07},
+    "Consumer Defensive":     {"pe": 20, "pb": 3.0, "roe": 0.18, "debt_eq": 70,  "pm": 0.10},
+    "Industrials":            {"pe": 18, "pb": 2.8, "roe": 0.14, "debt_eq": 90,  "pm": 0.09},
+    "Energy":                 {"pe": 12, "pb": 1.5, "roe": 0.12, "debt_eq": 60,  "pm": 0.08},
+    "Utilities":              {"pe": 16, "pb": 1.6, "roe": 0.10, "debt_eq": 150, "pm": 0.12},
+    "Real Estate":            {"pe": 30, "pb": 1.8, "roe": 0.08, "debt_eq": 160, "pm": 0.20},
+    "Basic Materials":        {"pe": 14, "pb": 1.8, "roe": 0.12, "debt_eq": 70,  "pm": 0.10},
+    "Communication Services": {"pe": 20, "pb": 2.5, "roe": 0.14, "debt_eq": 80,  "pm": 0.14},
+    "default":                {"pe": 18, "pb": 2.5, "roe": 0.14, "debt_eq": 80,  "pm": 0.10},
+}
+
+
 def _num(val) -> Optional[float]:
     """Convertit une valeur en float, retourne None si impossible."""
     if val is None:
@@ -91,6 +109,21 @@ def get_fundamental_data(ticker: str) -> dict:
             data["pct_from_52w_low"] = None
         data["five_year_avg_dividend_yield"] = _num(info.get("fiveYearAvgDividendYield"))
         data["trailing_annual_dividend_yield"] = _num(info.get("trailingAnnualDividendYield"))
+
+        data["ebit"]             = _num(info.get("ebit"))
+        data["interest_expense"] = _num(info.get("interestExpense"))
+
+        # Ratio de couverture des intérêts = EBIT / intérêts payés
+        if data["ebit"] is not None and data["interest_expense"] and data["interest_expense"] != 0:
+            data["interest_coverage"] = round(data["ebit"] / abs(data["interest_expense"]), 1)
+        else:
+            data["interest_coverage"] = None
+
+        # EV/FCF
+        if data["enterprise_value"] and data["free_cash_flow"] and data["free_cash_flow"] > 0:
+            data["ev_to_fcf"] = round(data["enterprise_value"] / data["free_cash_flow"], 1)
+        else:
+            data["ev_to_fcf"] = None
     except Exception:
         pass
 
@@ -102,18 +135,29 @@ def score_valuation(fundamentals: dict) -> dict:
     scores = []
     details = []
 
+    sector = fundamentals.get("sector") or "default"
+    medians = SECTOR_MEDIANS.get(sector, SECTOR_MEDIANS["default"])
+    pe_median = medians["pe"]
+
     pe = _num(fundamentals.get("pe_ratio"))
     if pe is not None and pe > 0:
-        if pe < 10:
-            scores.append(1.0); details.append(f"P/E bas ({pe:.1f}) - potentiellement sous-evalue")
-        elif pe < 15:
-            scores.append(0.5); details.append(f"P/E raisonnable ({pe:.1f})")
-        elif pe < 25:
-            scores.append(0.0); details.append(f"P/E moyen ({pe:.1f})")
-        elif pe < 40:
-            scores.append(-0.5); details.append(f"P/E eleve ({pe:.1f}) - potentiellement surevalue")
+        # Comparer au P/E médian du secteur
+        pe_vs_sector = (pe - pe_median) / pe_median  # négatif = moins cher que le secteur
+        if pe_vs_sector < -0.30:
+            scores.append(1.0)
+            details.append(f"Très bon marché vs son secteur : P/E {pe:.1f} vs médiane {pe_median:.0f}x ({sector})")
+        elif pe_vs_sector < -0.10:
+            scores.append(0.5)
+            details.append(f"Légèrement moins cher que son secteur : P/E {pe:.1f} vs {pe_median:.0f}x")
+        elif pe_vs_sector < 0.20:
+            scores.append(0.0)
+            details.append(f"Valorisation dans la norme sectorielle : P/E {pe:.1f} (médiane {pe_median:.0f}x)")
+        elif pe_vs_sector < 0.50:
+            scores.append(-0.5)
+            details.append(f"Plus cher que la moyenne du secteur : P/E {pe:.1f} vs {pe_median:.0f}x")
         else:
-            scores.append(-1.0); details.append(f"P/E tres eleve ({pe:.1f}) - attention a la valorisation")
+            scores.append(-1.0)
+            details.append(f"Très cher vs son secteur : P/E {pe:.1f} vs médiane {pe_median:.0f}x — prime injustifiée ?")
 
     peg = _num(fundamentals.get("peg_ratio"))
     if peg is not None and peg > 0:
@@ -146,6 +190,21 @@ def score_valuation(fundamentals: dict) -> dict:
             scores.append(-0.4); details.append(f"Cours proche du plus haut 52 semaines ({pos_52w:.0f}%) — prudence")
         elif pos_52w >= 70:
             scores.append(-0.1); details.append(f"Cours dans le haut de la range 52 semaines ({pos_52w:.0f}%)")
+
+    ev_fcf = _num(fundamentals.get("ev_to_fcf"))
+    if ev_fcf is not None and ev_fcf > 0:
+        if ev_fcf < 15:
+            scores.append(0.8)
+            details.append(f"Valorisation EV/FCF attractive ({ev_fcf:.1f}x) — peu cher par rapport au cash généré")
+        elif ev_fcf < 25:
+            scores.append(0.3)
+            details.append(f"EV/FCF correct ({ev_fcf:.1f}x)")
+        elif ev_fcf < 40:
+            scores.append(-0.2)
+            details.append(f"EV/FCF élevé ({ev_fcf:.1f}x) — valorisation tendue")
+        else:
+            scores.append(-0.6)
+            details.append(f"EV/FCF très élevé ({ev_fcf:.1f}x) — très cher sur la base du cash")
 
     overall = sum(scores) / len(scores) if scores else 0.0
     return {"score": overall, "details": details}
@@ -240,8 +299,75 @@ def score_financial_health(fundamentals: dict) -> dict:
         else:
             scores.append(-0.6); details.append(f"Liquidite insuffisante (CR: {cr:.2f})")
 
+    ic = _num(fundamentals.get("interest_coverage"))
+    if ic is not None:
+        if ic > 10:
+            scores.append(0.7)
+            details.append(f"Dettes très bien couvertes : génère {ic:.1f}x ses charges d'intérêts")
+        elif ic > 5:
+            scores.append(0.3)
+            details.append(f"Bonne couverture des intérêts ({ic:.1f}x)")
+        elif ic > 2:
+            scores.append(-0.1)
+            details.append(f"Couverture des intérêts correcte mais à surveiller ({ic:.1f}x)")
+        elif ic > 0:
+            scores.append(-0.5)
+            details.append(f"Couverture des intérêts faible ({ic:.1f}x) — dettes pèsent lourd")
+        else:
+            scores.append(-0.9)
+            details.append(f"L'entreprise ne couvre pas ses charges d'intérêts — risque de défaut")
+
     overall = sum(scores) / len(scores) if scores else 0.0
     return {"score": overall, "details": details}
+
+
+def compute_red_flags(fundamentals: dict) -> list:
+    """Détecte les signaux d'alarme critiques à afficher en priorité."""
+    flags = []
+
+    # Dividende non soutenable
+    payout = _num(fundamentals.get("payout_ratio"))
+    if payout is not None and payout > 1.0:
+        flags.append(f"⚠️ Dividende non soutenable : distribue {payout:.0%} de ses bénéfices")
+
+    # FCF négatif + dette élevée = combo dangereux
+    fcf = _num(fundamentals.get("free_cash_flow"))
+    nd_ebitda = _num(fundamentals.get("net_debt_to_ebitda"))
+    if fcf is not None and fcf < 0 and nd_ebitda is not None and nd_ebitda > 3:
+        flags.append(f"🚨 Cash négatif + dette lourde ({nd_ebitda:.1f}x EBITDA) — combinaison risquée")
+
+    # Couverture des intérêts très faible
+    ic = _num(fundamentals.get("interest_coverage"))
+    if ic is not None and ic < 2 and ic > 0:
+        flags.append(f"⚠️ Dettes difficilement couvertes (couverture {ic:.1f}x)")
+    elif ic is not None and ic <= 0:
+        flags.append(f"🚨 Ne couvre pas ses charges d'intérêts — risque financier critique")
+
+    # Pertes nettes
+    pm = _num(fundamentals.get("profit_margin"))
+    if pm is not None and pm < -0.05:
+        flags.append(f"⚠️ Pertes significatives : marge nette de {pm:.1%}")
+
+    # Endettement extrême
+    dte = _num(fundamentals.get("debt_to_equity"))
+    if dte is not None and dte > 300:
+        flags.append(f"🚨 Endettement extrême : dette = {dte:.0f}% des capitaux propres")
+
+    # ROIC négatif
+    roic = _num(fundamentals.get("roic"))
+    if roic is not None and roic < -0.05:
+        flags.append(f"⚠️ Détruit de la valeur : ROIC négatif ({roic:.1%})")
+
+    return flags
+
+
+def compute_quality_grade(quality_score: float) -> str:
+    """Convertit le quality_score [-1, +1] en note lisible."""
+    if quality_score >= 0.65:   return "A"
+    elif quality_score >= 0.35: return "B"
+    elif quality_score >= 0.05: return "C"
+    elif quality_score >= -0.2: return "D"
+    else:                       return "F"
 
 
 def get_fundamental_summary(ticker: str) -> dict:
@@ -271,6 +397,9 @@ def get_fundamental_summary(ticker: str) -> dict:
     }
     overall = sum(sub_scores[k] * weights[k] for k in weights)
 
+    red_flags = compute_red_flags(fundamentals)
+    quality_grade = compute_quality_grade(overall)
+
     # Dividende
     dividend_info = None
     if fundamentals.get("dividend_yield") is not None:
@@ -293,4 +422,7 @@ def get_fundamental_summary(ticker: str) -> dict:
         "dividend": dividend_info,
         "overall_score": overall,
         "raw_data": fundamentals,
+        "red_flags": red_flags,
+        "quality_grade": quality_grade,
+        "fundamentals": fundamentals,
     }

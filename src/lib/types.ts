@@ -110,6 +110,10 @@ export interface OpportunityScore {
   roic?: number | null;
   fcf_margin?: number | null;
   net_debt_to_ebitda?: number | null;
+  red_flags?: string[];
+  quality_grade?: string;
+  interest_coverage?: number | null;
+  ev_to_fcf?: number | null;
 }
 
 export interface DCAPosition {
