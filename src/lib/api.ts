@@ -132,3 +132,14 @@ export const getDCAHistory = () =>
 
 export const getAppConfig = () =>
   fetchJSON(`${BASE}/config`);
+
+// ── Mon Portefeuille ──────────────────────────────────────────
+
+export async function analyzePortfolio(positions: any[], budget: number, token: string) {
+  const res = await fetch("/api/portfolio/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+    body: JSON.stringify({ positions, budget }),
+  });
+  return res.json();
+}

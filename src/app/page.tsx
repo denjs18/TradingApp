@@ -66,6 +66,7 @@ export default function HomePage() {
             { href: "/trading", label: "Trading Auto" },
             { href: "/opportunities", label: "Opportunités" },
             { href: "/dca", label: "DCA Advisor" },
+            { href: "/portfolio", label: "Mon Portefeuille" },
           ].map((l) => (
             <Link
               key={l.href}

@@ -987,6 +987,123 @@ def dca_history():
     return jsonify(get_portfolio_history())
 
 
+# ── Portfolio personnel (PEA) ─────────────────────────────────
+
+@app.route("/api/portfolio/analyze", methods=["POST"])
+def portfolio_analyze():
+    """Analyse un portefeuille PEA importé depuis un CSV broker."""
+    import requests as req
+    import json as _json
+
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Authentication required"}), 401
+
+    if user and user.get("groq_api_key"):
+        groq_key = user["groq_api_key"]
+    else:
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+
+    data = request.get_json() or {}
+    positions = data.get("positions", [])
+    budget = float(data.get("budget", 200))
+
+    if not positions:
+        return jsonify({"error": "no positions"}), 400
+
+    # Score each position
+    enriched_positions = []
+    for p in positions:
+        ticker_or_isin = p.get("ticker") or p.get("isin")
+        enriched = dict(p)
+        try:
+            score_data = compute_opportunity_score(ticker_or_isin)
+            enriched["score"] = score_data.get("score")
+            enriched["technical_score"] = score_data.get("technical_score")
+            enriched["fundamental_score"] = score_data.get("fundamental_score")
+            enriched["sentiment_score"] = score_data.get("sentiment_score")
+            enriched["quality_grade"] = score_data.get("quality_grade")
+            enriched["red_flags"] = score_data.get("red_flags", [])
+            enriched["recommendation"] = score_data.get("recommendation")
+            enriched["target_price"] = score_data.get("target_price")
+            enriched["gain_pct"] = score_data.get("gain_pct")
+        except Exception as e:
+            enriched["score"] = None
+            enriched["error"] = str(e)
+        enriched_positions.append(enriched)
+
+    # Compute weight_pct
+    total_val = sum(p.get("current_value", 0) or 0 for p in enriched_positions)
+    for p in enriched_positions:
+        p["weight_pct"] = round((p.get("current_value", 0) or 0) / total_val * 100, 1) if total_val > 0 else 0
+
+    # Groq portfolio review
+    groq_advice = {}
+    if groq_key:
+        try:
+            portfolio_summary = "\n".join([
+                f"- {p.get('name', p.get('ticker'))}: {p.get('shares')} titres, PRU {p.get('avg_price', 0):.2f}€, "
+                f"cours actuel {p.get('current_price') or '?'}€, P&L {p.get('pnl_pct', 0) or 0:.1f}%, "
+                f"poids {p.get('weight_pct', 0):.1f}% du portefeuille, score {p.get('score', '?')}/10, "
+                f"note qualité {p.get('quality_grade', '?')}, red flags: {'; '.join(p.get('red_flags', [])) or 'aucun'}"
+                for p in enriched_positions
+            ])
+
+            prompt = f"""Tu es un conseiller en gestion de patrimoine spécialisé DCA long terme pour PEA français.
+
+Portefeuille à analyser (valeur totale ~{total_val:.0f}€) :
+{portfolio_summary}
+
+Budget DCA disponible ce mois : {budget}€
+
+Pour CHAQUE position, donne :
+1. Verdict (UN SEUL parmi : "renforcer", "garder", "alléger", "vendre")
+2. Conviction (1-10)
+3. Raison principale en 1-2 phrases
+4. Pour les ETFs : évalue la logique d'allocation (surpondération/sous-pondération par rapport au reste)
+
+Ensuite donne :
+- Analyse globale du portefeuille (diversification, risques, thèses)
+- Avec {budget}€ ce mois, quelle(s) position(s) renforcer en priorité et pourquoi
+- Un signal d'alarme si une position mérite action urgente
+
+Réponds EN JSON avec cette structure exacte :
+{{
+  "positions": [
+    {{"ticker": "...", "verdict": "renforcer|garder|alléger|vendre", "conviction": 8, "raison": "..."}}
+  ],
+  "analyse_globale": "...",
+  "priorite_dca": "...",
+  "alerte": "..."
+}}"""
+
+            resp = req.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.3,
+                    "max_tokens": 1500,
+                },
+                timeout=45,
+            )
+            resp.raise_for_status()
+            content = resp.json()["choices"][0]["message"]["content"]
+            start = content.find("{")
+            end = content.rfind("}") + 1
+            if start >= 0 and end > start:
+                groq_advice = _json.loads(content[start:end])
+        except Exception as e:
+            groq_advice = {"error": str(e)}
+
+    return jsonify(sanitize({
+        "positions": enriched_positions,
+        "advice": groq_advice,
+        "total_value": total_val,
+    }))
+
+
 # ── Cron (remplace APScheduler) ───────────────────────────────
 
 ALL_PEA_TICKERS = [
