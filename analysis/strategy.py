@@ -276,8 +276,10 @@ def compute_opportunity_score(ticker: str) -> dict:
 
     # Scoring DCA-first : le fondamental domine, le technique est un signal mineur
     # fund×5.5 + tech×1.5 + sent×1.0 + analyst~2.5 → total sur [-10, +10]
+    is_etf = fund.get("is_etf", False)
     tech_score = tech["overall_score"] * 1.5    # mineur : signal de timing
-    fund_score = fund["overall_score"] * 5.5    # dominant : qualité drive l'alpha
+    # For ETFs, fundamental score is unreliable (no P/E, ROE, etc. but 52w position can be negative)
+    fund_score = 0.0 if is_etf else fund["overall_score"] * 5.5
     sent_score = sentiment["overall_score"] * 1.0  # secondaire : réducteur de bruit
 
     # Score analyste

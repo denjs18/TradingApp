@@ -401,7 +401,7 @@ def get_fundamental_summary(ticker: str) -> dict:
 
     is_etf = fundamentals.get("is_etf", False)
     red_flags = [] if is_etf else compute_red_flags(fundamentals)
-    quality_grade = None if is_etf else compute_quality_grade(quality_longterm["score"])
+    quality_grade = None if is_etf else compute_quality_grade(overall)
 
     # Dividende
     dividend_info = None

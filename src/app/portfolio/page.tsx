@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
+import { parseSuiviPEA, type PEAData } from "@/lib/parseSuiviPEA";
+
+const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
 const GOLD = "#c9a84c";
 const GREEN = "#3d9e6e";
@@ -142,6 +146,12 @@ export default function PortfolioPage() {
   const [csvError, setCsvError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Suivi PEA historique
+  const [peaData, setPeaData] = useState<PEAData | null>(null);
+  const [peaLoading, setPeaLoading] = useState(false);
+  const [peaHistPrices, setPeaHistPrices] = useState<Record<string, Record<string, number>> | null>(null);
+  const peaFileRef = useRef<HTMLInputElement>(null);
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -187,6 +197,42 @@ export default function PortfolioPage() {
       setCsvError("Erreur lors de l'analyse : " + err.message);
     } finally {
       setAnalyzing(false);
+    }
+  }
+
+  // ── Suivi PEA : import fichier Excel ──────────────────────────────────────
+  async function handlePEAFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setPeaLoading(true);
+    setPeaHistPrices(null);
+    try {
+      const XLSX = await import("xlsx");
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array" });
+      const sheet = wb.Sheets["Suivi PEA"];
+      if (!sheet) { alert('Onglet "Suivi PEA" introuvable dans le fichier.'); return; }
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null });
+      const parsed = parseSuiviPEA(rows);
+      setPeaData(parsed);
+
+      // Fetch historical prices from backend
+      const instruments = parsed.instruments
+        .filter(i => i.ticker)
+        .map(i => ({ name: i.name, ticker: i.ticker }));
+      if (instruments.length > 0) {
+        const res = await fetch("/api/portfolio/historical-prices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ instruments, period: "5y" }),
+        });
+        if (res.ok) setPeaHistPrices(await res.json());
+      }
+    } catch (err: any) {
+      alert("Erreur lors du parsing : " + err.message);
+    } finally {
+      setPeaLoading(false);
     }
   }
 
@@ -922,6 +968,265 @@ export default function PortfolioPage() {
             </div>
           </div>
         )}
+
+        {/* ── Section Suivi PEA historique ─────────────────────────────── */}
+        <div style={{ marginTop: "3rem" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexWrap: "wrap", gap: "0.75rem" }}>
+            <div>
+              <h2 style={{ color: GOLD, fontSize: "1.1rem", fontWeight: 700, margin: 0 }}>Historique du PEA</h2>
+              <p style={{ color: "#8892a4", fontSize: "0.78rem", margin: "0.3rem 0 0" }}>
+                Importez votre fichier <strong style={{ color: "var(--text-secondary)" }}>Suivi_global.xlsx</strong> — onglet "Suivi PEA" exploité automatiquement
+              </p>
+            </div>
+            <div>
+              <input ref={peaFileRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={handlePEAFile} />
+              <button
+                onClick={() => peaFileRef.current?.click()}
+                disabled={peaLoading}
+                style={{
+                  background: peaLoading ? "rgba(201,168,76,0.1)" : "rgba(201,168,76,0.15)",
+                  border: `1px solid ${GOLD}55`, borderRadius: 8, color: GOLD,
+                  padding: "0.55rem 1.2rem", fontWeight: 600, fontSize: "0.82rem",
+                  cursor: peaLoading ? "wait" : "pointer",
+                }}
+              >
+                {peaLoading ? "⏳ Chargement…" : "📂 Importer Suivi_global.xlsx"}
+              </button>
+            </div>
+          </div>
+
+          {peaData && (() => {
+            const months = peaData.months;
+            const instruments = peaData.instruments;
+            if (!months.length) return null;
+
+            // ── Chart 1 : Montant investi par mois (bar) ──────────────
+            const monthLabels = months.map(m => `${m.month_name.slice(0,3)} ${m.year}`);
+            const monthlyAmounts = months.map(m => m.total_invested_month);
+
+            // ── Chart 2 : Total cumulé investi vs Valeur marché estimée ──
+            let cumulInvested = 0;
+            const cumulInvestedArr: number[] = [];
+            const marketValueArr: number[] = [];
+            const monthKeys = months.map(m => {
+              const monthNum = ["janvier","février","mars","avril","mai","juin",
+                "juillet","août","septembre","octobre","novembre","décembre"]
+                .findIndex(n => m.month_name.toLowerCase().startsWith(n.slice(0,3)));
+              const mn = monthNum >= 0 ? monthNum + 1 : 1;
+              return `${m.year}-${String(mn).padStart(2,"0")}`;
+            });
+
+            months.forEach((m, i) => {
+              cumulInvested += m.total_invested_month;
+              cumulInvestedArr.push(Math.round(cumulInvested));
+              // Market value = sum(qty_total × historical_price) for this month
+              let val = 0;
+              for (const inst of instruments) {
+                const instData = m.instruments[inst.name];
+                if (!instData || !instData.qty_total) continue;
+                const key = monthKeys[i];
+                const price = peaHistPrices?.[inst.name]?.[key];
+                if (price) {
+                  val += instData.qty_total * price;
+                } else if (instData.prix) {
+                  // Fallback: use buy price
+                  val += instData.qty_total * instData.prix;
+                }
+              }
+              marketValueArr.push(Math.round(val));
+            });
+
+            const lastMonth = months[months.length - 1];
+            const totalInvested = cumulInvestedArr[cumulInvestedArr.length - 1];
+            const totalMarket = marketValueArr[marketValueArr.length - 1];
+            const perfPct = totalInvested > 0 ? ((totalMarket - totalInvested) / totalInvested * 100) : 0;
+
+            // ── Chart 3 : Allocation actuelle par instrument (pie) ──
+            const pieLabels: string[] = [];
+            const pieValues: number[] = [];
+            for (const inst of instruments) {
+              const cur = peaData.current[inst.name];
+              if (cur && cur.total_cumule > 0) {
+                pieLabels.push(inst.name);
+                pieValues.push(cur.total_cumule);
+              }
+            }
+
+            // ── Chart 4 : Évolution allocation (stacked area) ──
+            const stackTraces = instruments
+              .filter(inst => months.some(m => (m.instruments[inst.name]?.qty_total || 0) > 0))
+              .map(inst => ({
+                name: inst.name,
+                x: monthLabels,
+                y: months.map((m, i) => {
+                  const instData = m.instruments[inst.name];
+                  if (!instData?.qty_total) return 0;
+                  const key = monthKeys[i];
+                  const price = peaHistPrices?.[inst.name]?.[key] || instData.prix || 0;
+                  return Math.round(instData.qty_total * price);
+                }),
+                type: "scatter" as const,
+                mode: "lines" as const,
+                stackgroup: "one",
+                fill: "tonexty" as const,
+              }));
+
+            const plotLayout: any = {
+              paper_bgcolor: "transparent", plot_bgcolor: "transparent",
+              font: { color: "#a0aab8", size: 11 },
+              margin: { t: 30, r: 10, l: 50, b: 50 },
+              xaxis: { gridcolor: "#1e2330", tickfont: { size: 10 } },
+              yaxis: { gridcolor: "#1e2330", ticksuffix: " €" },
+              legend: { font: { size: 10 }, bgcolor: "transparent" },
+              showlegend: true,
+            };
+            const plotConfig = { displayModeBar: false, responsive: true };
+
+            return (
+              <div>
+                {/* KPI summary */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "0.75rem", marginBottom: "1.5rem" }}>
+                  {[
+                    { label: "Total investi", val: `${totalInvested.toLocaleString("fr-FR")} €`, color: GOLD },
+                    { label: "Valeur estimée", val: `${totalMarket.toLocaleString("fr-FR")} €`, color: totalMarket > totalInvested ? GREEN : RED },
+                    { label: "Performance", val: `${perfPct > 0 ? "+" : ""}${perfPct.toFixed(1)}%`, color: perfPct >= 0 ? GREEN : RED },
+                    { label: "Nb mois de DCA", val: `${months.length} mois`, color: "var(--text-primary)" },
+                    { label: "Instruments", val: `${instruments.length}`, color: "var(--text-primary)" },
+                  ].map(({ label, val, color }) => (
+                    <div key={label} className="metric-card">
+                      <div className="metric-label">{label}</div>
+                      <div className="metric-value" style={{ color, fontSize: "1rem" }}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Charts grid */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+
+                  {/* Chart 1: Performance vs investi */}
+                  <div className="card" style={{ gridColumn: "1 / -1" }}>
+                    <div style={{ fontSize: "0.8rem", fontWeight: 600, color: GOLD, marginBottom: "0.5rem" }}>
+                      Performance vs Montant investi
+                      {!peaHistPrices && <span style={{ color: "#8892a4", fontWeight: 400, fontSize: "0.7rem", marginLeft: "0.5rem" }}>(prix d'achat en attendant les données marché…)</span>}
+                    </div>
+                    <Plot
+                      data={[
+                        {
+                          name: "Montant investi cumulé",
+                          x: monthLabels, y: cumulInvestedArr,
+                          type: "scatter", mode: "lines",
+                          line: { color: GOLD, width: 2, dash: "dot" },
+                          fill: "none",
+                        },
+                        {
+                          name: "Valeur portefeuille estimée",
+                          x: monthLabels, y: marketValueArr,
+                          type: "scatter", mode: "lines",
+                          line: { color: GREEN, width: 2.5 },
+                          fill: "tonexty",
+                          fillcolor: "rgba(61,158,110,0.08)",
+                        },
+                      ]}
+                      layout={{ ...plotLayout, height: 260, showlegend: true }}
+                      config={plotConfig}
+                      style={{ width: "100%" }}
+                    />
+                  </div>
+
+                  {/* Chart 2: Montant investi par mois */}
+                  <div className="card">
+                    <div style={{ fontSize: "0.8rem", fontWeight: 600, color: GOLD, marginBottom: "0.5rem" }}>Montant investi par mois</div>
+                    <Plot
+                      data={[{
+                        x: monthLabels, y: monthlyAmounts,
+                        type: "bar",
+                        marker: { color: GOLD, opacity: 0.8 },
+                        name: "Investi ce mois",
+                      }]}
+                      layout={{ ...plotLayout, height: 220, showlegend: false }}
+                      config={plotConfig}
+                      style={{ width: "100%" }}
+                    />
+                  </div>
+
+                  {/* Chart 3: Allocation actuelle */}
+                  <div className="card">
+                    <div style={{ fontSize: "0.8rem", fontWeight: 600, color: GOLD, marginBottom: "0.5rem" }}>Allocation actuelle (montant investi)</div>
+                    <Plot
+                      data={[{
+                        labels: pieLabels, values: pieValues,
+                        type: "pie",
+                        hole: 0.45,
+                        textinfo: "label+percent",
+                        textfont: { size: 10 },
+                        marker: { colors: ["#c9a84c","#3d9e6e","#4a7fc1","#d4834a","#8b5cf6","#ec4899","#14b8a6","#f59e0b","#6366f1","#84cc16","#f43f5e","#0ea5e9"] },
+                      }]}
+                      layout={{ ...plotLayout, height: 220, showlegend: false, margin: { t: 10, r: 10, l: 10, b: 10 } }}
+                      config={plotConfig}
+                      style={{ width: "100%" }}
+                    />
+                  </div>
+
+                  {/* Chart 4: Évolution stacked area */}
+                  {stackTraces.length > 0 && (
+                    <div className="card" style={{ gridColumn: "1 / -1" }}>
+                      <div style={{ fontSize: "0.8rem", fontWeight: 600, color: GOLD, marginBottom: "0.5rem" }}>Évolution de la valeur par instrument</div>
+                      <Plot
+                        data={stackTraces}
+                        layout={{ ...plotLayout, height: 280 }}
+                        config={plotConfig}
+                        style={{ width: "100%" }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Table récap par instrument */}
+                <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                  <table className="trading-table">
+                    <thead>
+                      <tr>
+                        <th>Instrument</th>
+                        <th>Ticker</th>
+                        <th>Qty totale</th>
+                        <th>Total investi</th>
+                        <th>PRU moyen</th>
+                        <th>Valeur estimée</th>
+                        <th>P&L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {instruments.map(inst => {
+                        const cur = peaData.current[inst.name];
+                        if (!cur) return null;
+                        const lastKey = monthKeys[monthKeys.length - 1];
+                        const lastPrice = peaHistPrices?.[inst.name]?.[lastKey]
+                          ?? (lastMonth.instruments[inst.name]?.prix ?? null);
+                        const val = lastPrice && cur.qty_total ? cur.qty_total * lastPrice : null;
+                        const pnl = val != null ? val - cur.total_cumule : null;
+                        const pnlPct = pnl != null && cur.total_cumule > 0 ? pnl / cur.total_cumule * 100 : null;
+                        const pru = cur.qty_total > 0 ? cur.total_cumule / cur.qty_total : null;
+                        return (
+                          <tr key={inst.name}>
+                            <td style={{ fontWeight: 600 }}>{inst.name}</td>
+                            <td style={{ color: "#8892a4", fontSize: "0.72rem" }}>{inst.ticker || "—"}</td>
+                            <td>{cur.qty_total}</td>
+                            <td>{cur.total_cumule.toFixed(2)} €</td>
+                            <td>{pru ? `${pru.toFixed(2)} €` : "—"}</td>
+                            <td>{val ? `${val.toFixed(2)} €` : "—"}</td>
+                            <td style={{ color: pnl == null ? "var(--text-muted)" : pnl >= 0 ? GREEN : RED, fontWeight: 600 }}>
+                              {pnl != null ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} € (${pnlPct?.toFixed(1)}%)` : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
 
         {/* Legal disclaimer */}
         <p style={{ fontSize: "0.68rem", color: "#4a5060", textAlign: "center", marginTop: "3rem" }}>
