@@ -23,12 +23,13 @@ SECTOR_MEDIANS = {
 
 
 def _num(val) -> Optional[float]:
-    """Convertit une valeur en float, retourne None si impossible."""
+    """Convertit une valeur en float, retourne None si impossible ou infini."""
     if val is None:
         return None
     try:
+        import math
         f = float(val)
-        return f if f == f else None  # rejette NaN
+        return None if (math.isnan(f) or math.isinf(f)) else f  # rejette NaN et Infinity
     except (TypeError, ValueError):
         return None
 
