@@ -99,6 +99,142 @@ const SECTORS: Record<string, string[]> = {
     "ANDR.VI","ATS.VI","EBS.VI","EVN.VI","LNZ.VI","OMV.VI","OPT.VI",
     "PAL.VI","RBI.VI","SBO.VI","STR.VI","UQA.VI","VER.VI","VIG.VI","VOE.VI","WIE.VI",
   ],
+  // ── SECTEURS ÉCONOMIQUES ─────────────────────────────────────────────────
+  "💻 Technologie & Logiciels": [
+    "SAP.DE","CAP.PA","DSY.PA","ORA.PA","PUB.PA","ALTEN.PA",
+    "ADYEN.AS","PRX.AS","ASML.AS","ASM.AS","BESI.AS","IFX.DE","STM.PA","NOKIA.HE",
+    "ERIC-B.ST","UBI.PA","OVH.PA","ENX.PA",
+  ],
+  "🔬 Santé & Pharmacie": [
+    "SAN.PA","OR.PA","SHL.DE","FME.DE","MRK.DE","BAYN.DE",
+    "NOVO-B.CO","GMAB.CO","DEMANT.CO","UCB.BR","ARGX.BR","SOLB.BR","GN.CO",
+    "ROVI.MC","GRF.MC","AZM.MI","MONC.MI",
+    "ALNA.PA","GENFIT.PA","ICAD.PA","IPH.PA",
+  ],
+  "🏦 Finance & Assurance": [
+    "BNP.PA","ACA.PA","GLE.PA","AXA.PA","ML.PA","BN.PA",
+    "DBK.DE","CBK.DE","ALV.DE","MUV2.DE",
+    "ABN.AS","INGA.AS","ASRNL.AS","NN.AS",
+    "ABI.BR","KBC.BR","GBLB.BR",
+    "BBVA.MC","SAN.MC","CABK.MC","MAP.MC",
+    "ISP.MI","UCG.MI","MB.MI",
+    "NDA-SE.ST","SEB-A.ST","SWED-A.ST","SHB-A.ST",
+    "DANSKE.CO",
+  ],
+  "⚡ Énergie & Utilities": [
+    "TTE.PA","ENGI.PA","SU.PA","EDF.PA","EDEN.PA",
+    "RWE.DE","EON.DE","ENR.DE",
+    "ENEL.MI","ENI.MI","SRG.MI","ERG.MI",
+    "IBE.MC","ELE.MC","ENG.MC","NTGY.MC","RED.MC","REP.MC",
+    "ORSTED.CO","VWS.CO","NESTE.HE","FORTUM.HE",
+    "EDP.LS","EDPR.LS","GALP.LS","RENE.LS",
+  ],
+  "✈️ Défense & Aérospatiale": [
+    "AIR.PA","SAF.PA","TEC.PA","HO.PA",
+    "RHM.DE","HEI.DE","MTX.DE",
+    "SAAB-B.ST",
+    "LDO.MI",
+    "IAG.MC","ANA.MC",
+  ],
+  "💎 Luxe & Consommation": [
+    "MC.PA","KER.PA","RMS.PA","EL.PA","RI.PA","AC.PA","PUB.PA","DG.PA","ML.PA",
+    "ADS.DE","PUM.DE",
+    "MONC.MI","BC.MI",
+    "ITX.MC","PUIG.MC",
+  ],
+  "🚗 Automobile": [
+    "RNO.PA","STLAM.PA","ML.PA",
+    "MBG.DE","BMW.DE","VOW3.DE","CON.DE","PAH3.DE",
+  ],
+  "🏗️ Industrie & Matériaux": [
+    "AI.PA","SGO.PA","LR.PA","ERAMET.PA","MT.AS",
+    "BAS.DE","SIE.DE","DHL.DE","HNR1.DE","QIA.DE",
+    "AKE.PA","SOLB.BR","UMI.BR",
+    "MTS.MC","FER.MC",
+    "TEN.MI","PRY.MI",
+    "ALFA.ST","SAND.ST","VOLV-B.ST","SKF-B.ST","SKA-B.ST",
+    "NKT.CO","ROCK-B.CO",
+    "VNA.DE","URW.PA","WDP.BR",
+  ],
+  "📡 Télécom & Médias": [
+    "ORA.PA","VIV.PA","BVI.PA","TF1.PA","M6.PA",
+    "DTE.DE","DTG.DE",
+    "KPN.AS","UMG.AS",
+    "TEF.MC","NOS.LS",
+    "TELIA.ST","TEL2-B.ST",
+    "NOKIA.HE","ELISA.HE",
+    "TIT.MI",
+  ],
+  // ── THÉMATIQUES TENDANCE ─────────────────────────────────────────────────
+  "🤖 IA & Semiconducteurs": [
+    "ASML.AS","ASM.AS","BESI.AS","IFX.DE","STM.PA",
+    "SAP.DE","CAP.PA","ALTEN.PA","DSY.PA",
+    "NOKIA.HE","ERIC-B.ST",
+  ],
+  "🌱 Transition énergétique": [
+    "ENGI.PA","SU.PA","TTE.PA","GTT.PA",
+    "RWE.DE","ENR.DE",
+    "ORSTED.CO","VWS.CO","NESTE.HE","FORTUM.HE",
+    "EDPR.LS","RENE.LS","EDP.LS",
+    "IBE.MC","ELE.MC","RED.MC",
+    "ENEL.MI",
+    "NIBE-B.ST",
+  ],
+  "🔐 Cybersécurité": [
+    "CAP.PA","ALTEN.PA","OVH.PA",
+    "SAP.DE",
+    "DSY.PA",
+  ],
+  "💊 Biotech & MedTech": [
+    "GENFIT.PA","ICAD.PA","IPH.PA","ALNA.PA",
+    "GMAB.CO","AMBU-B.CO",
+    "ARGX.BR","UCB.BR",
+    "GN.CO","DEMANT.CO",
+    "ROVI.MC","GRF.MC",
+  ],
+  "🛸 Spatial & Drones": [
+    "AIR.PA","SAF.PA","TEC.PA","HO.PA",
+    "RHM.DE",
+    "SAAB-B.ST",
+    "LDO.MI",
+  ],
+  "🏠 Immobilier coté (SIIC/REIT)": [
+    "URW.PA","COV.PA","ALTAREA.PA","LI.PA","LAGR.PA","WLN.PA",
+    "VNA.DE",
+    "WDP.BR",
+  ],
+  "📈 ETFs PEA accessibles": [
+    "PUST.PA","LCWL.PA","ISPY.PA","AERO.PA","PAEEM.PA",
+    "CW8.PA","AWLD.PA","PCEU.PA","C40.PA",
+    "LYPS.DE","XDWD.DE","DBXD.DE",
+  ],
+  // ── ACTUALITÉ DU MOMENT (juin 2026) ──────────────────────────────────────
+  "📰 Réarmement Europe": [
+    "RHM.DE","HEI.DE","MTX.DE","AIR.PA","SAF.PA","TEC.PA","HO.PA",
+    "SAAB-B.ST","LDO.MI",
+  ],
+  "🏰 Nucléaire & Énergie bas-carbone": [
+    "EDF.PA","ENGI.PA","SU.PA","GTT.PA","TTE.PA",
+    "NESTE.HE","FORTUM.HE","ORSTED.CO",
+    "RWE.DE",
+  ],
+  "🇺🇸 Impacté par tarifs Trump": [
+    "AIR.PA","RNO.PA","STLAM.PA","VOW3.DE","BMW.DE","MBG.DE",
+    "MC.PA","KER.PA","RMS.PA","EL.PA",
+    "ASML.AS","STM.PA","IFX.DE",
+    "MT.AS","BAS.DE",
+  ],
+  "🤖 Robotique & Automatisation": [
+    "KION.DE","SIE.DE","HEXA-B.ST","LIFCO-B.ST",
+    "CAP.PA","ALTEN.PA","STM.PA","IFX.DE",
+  ],
+  "🏥 Vieillissement démographique": [
+    "NOVO-B.CO","SAN.PA","BAYN.DE","FME.DE","MRK.DE","SHL.DE",
+    "AMBU-B.CO","DEMANT.CO","GN.CO",
+    "UCB.BR","ARGX.BR",
+    "IPH.PA","ICAD.PA",
+    "SAN.MC","AZM.MI",
+  ],
 };
 
 function scoreColor(score: number) {
@@ -344,7 +480,8 @@ export default function OpportunitiesPage() {
           ← Accueil
         </Link>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+        {/* Global select/deselect */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
           <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text-secondary)" }}>
             Indices / Secteurs
           </div>
@@ -361,26 +498,71 @@ export default function OpportunitiesPage() {
             {selectedSectors.length === allSectorNames.length ? "Tout désélectionner" : "Tout sélectionner"}
           </button>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "1rem" }}>
-          {allSectorNames.map((s) => (
-            <label
-              key={s}
-              style={{
-                display: "flex", alignItems: "center", gap: "0.5rem",
-                cursor: "pointer", fontSize: "0.75rem", color: "var(--text-secondary)",
-                textTransform: "none", letterSpacing: 0, marginBottom: 0,
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={selectedSectors.includes(s)}
-                onChange={() => toggleSector(s)}
-                style={{ accentColor: GOLD }}
-              />
-              {s}
-            </label>
-          ))}
-        </div>
+
+        {/* Grouped sectors */}
+        {[
+          {
+            label: "Indices boursiers",
+            keys: allSectorNames.filter(k => !/^\p{Emoji}/u.test(k)),
+          },
+          {
+            label: "Secteurs économiques",
+            keys: allSectorNames.filter(k => /^[💻🔬🏦⚡✈️💎🚗🏗️📡]/u.test(k)),
+          },
+          {
+            label: "Thématiques tendance",
+            keys: allSectorNames.filter(k => /^[🤖🌱🔐💊🛸🏠📈]/u.test(k) && !k.startsWith("🤖 Robotique") && !k.startsWith("🏥")),
+          },
+          {
+            label: "Actualité du moment",
+            keys: allSectorNames.filter(k => /^[📰🏰🇺🇸]/u.test(k) || k.startsWith("🤖 Robotique") || k.startsWith("🏥")),
+          },
+        ].map(({ label, keys }) => (
+          <div key={label} style={{ marginBottom: "1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.3rem" }}>
+              <div style={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)" }}>
+                {label}
+              </div>
+              <button
+                onClick={() => {
+                  const allSelected = keys.every(k => selectedSectors.includes(k));
+                  if (allSelected) {
+                    setSelectedSectors(prev => prev.filter(s => !keys.includes(s)));
+                  } else {
+                    setSelectedSectors(prev => Array.from(new Set([...prev, ...keys])));
+                  }
+                }}
+                style={{
+                  fontSize: "0.58rem", background: "none", border: "1px solid var(--border)",
+                  borderRadius: 3, padding: "0.1rem 0.35rem", cursor: "pointer",
+                  color: "var(--text-muted)",
+                }}
+              >
+                Tout sélectionner
+              </button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+              {keys.map((s) => (
+                <label
+                  key={s}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "0.5rem",
+                    cursor: "pointer", fontSize: "0.72rem", color: "var(--text-secondary)",
+                    textTransform: "none", letterSpacing: 0, marginBottom: 0,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedSectors.includes(s)}
+                    onChange={() => toggleSector(s)}
+                    style={{ accentColor: GOLD }}
+                  />
+                  {s}
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
 
         <hr style={{ borderColor: "var(--border)", marginBottom: "1rem" }} />
 
