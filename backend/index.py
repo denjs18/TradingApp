@@ -1133,6 +1133,39 @@ def portfolio_historical_prices():
     return jsonify(sanitize(results))
 
 
+# ── Backtesting ────────────────────────────────────────────────
+
+@app.route("/api/backtest", methods=["POST"])
+def backtest():
+    """Lance un backtest d'une stratégie sur des données historiques."""
+    from trading.backtester import run_backtest
+    data = request.get_json() or {}
+    ticker          = data.get("ticker", "").upper().strip()
+    strategy        = data.get("strategy", "combined")
+    period          = data.get("period", "2y")
+    capital         = float(data.get("initial_capital", 10000))
+    stop_loss       = float(data.get("stop_loss_pct", 0.05))
+    take_profit     = float(data.get("take_profit_pct", 0.10))
+    position_size   = float(data.get("position_size_pct", 0.95))
+
+    if not ticker:
+        return jsonify({"error": "ticker requis"}), 400
+    if period not in ("6mo", "1y", "2y", "3y", "5y"):
+        return jsonify({"error": "period invalide"}), 400
+
+    result = run_backtest(
+        ticker=ticker,
+        strategy_name=strategy,
+        period=period,
+        initial_capital=capital,
+        stop_loss_pct=stop_loss,
+        take_profit_pct=take_profit,
+        position_size_pct=position_size,
+    )
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(sanitize(result))
+
 
 # ── Cron (remplace APScheduler) ───────────────────────────────
 

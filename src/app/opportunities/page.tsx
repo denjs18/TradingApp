@@ -471,6 +471,24 @@ export default function OpportunitiesPage() {
   const highScore = filtered.filter((r) => r.score >= 7);
   const tickers = getTickerList();
 
+  // ── Grouper les résultats par catégorie sélectionnée ──────────────────
+  // Construit un index ticker → liste de catégories sélectionnées qui le contiennent
+  const tickerToCategories: Record<string, string[]> = {};
+  for (const sector of selectedSectors) {
+    for (const t of (SECTORS[sector] || [])) {
+      if (!tickerToCategories[t]) tickerToCategories[t] = [];
+      tickerToCategories[t].push(sector);
+    }
+  }
+  // Pour chaque catégorie sélectionnée, liste des résultats triés par score
+  const resultsByCategory: Array<{ category: string; items: typeof filtered }> =
+    selectedSectors.map(sector => ({
+      category: sector,
+      items: filtered
+        .filter(r => (SECTORS[sector] || []).includes(r.ticker))
+        .sort((a, b) => b.score - a.score),
+    })).filter(g => g.items.length > 0);
+
   return (
     <div className="page-layout">
       {/* Sidebar */}
@@ -850,6 +868,51 @@ export default function OpportunitiesPage() {
                   </div>
                 )}
               </div>
+            )}
+
+            {/* ── Résultats par catégorie ── */}
+            {resultsByCategory.length > 0 && selectedSectors.length > 1 && (
+              <>
+                <SectionTitle>Par catégorie</SectionTitle>
+                {resultsByCategory.map(({ category, items }) => (
+                  <div key={category} style={{ marginBottom: "1.25rem" }}>
+                    <div style={{
+                      fontSize: "0.7rem", fontWeight: 700, color: GOLD,
+                      textTransform: "uppercase", letterSpacing: "0.1em",
+                      marginBottom: "0.5rem", paddingBottom: "0.3rem",
+                      borderBottom: `1px solid rgba(201,168,76,0.25)`,
+                      display: "flex", alignItems: "center", gap: "0.5rem",
+                    }}>
+                      {category}
+                      <span style={{ color: "#8892a4", fontWeight: 400, fontSize: "0.65rem", textTransform: "none" }}>
+                        {items.length} titre{items.length > 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                      {items.map(opp => {
+                        const sc = opp.score;
+                        const col = sc >= 6 ? GREEN : sc >= 3 ? ORANGE : sc >= 0 ? GOLD : RED;
+                        return (
+                          <button
+                            key={opp.ticker}
+                            onClick={() => toggleDetail(opp)}
+                            style={{
+                              background: "var(--surface2)", border: `1px solid ${col}44`,
+                              borderLeft: `3px solid ${col}`, borderRadius: 4,
+                              padding: "0.4rem 0.7rem", cursor: "pointer", textAlign: "left",
+                              color: "var(--text-primary)", minWidth: 120,
+                            }}
+                          >
+                            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: col }}>{opp.ticker}</div>
+                            <div style={{ fontSize: "0.65rem", color: "#8892a4", marginTop: "0.1rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>{opp.name}</div>
+                            <div style={{ fontSize: "0.72rem", fontWeight: 600, color: col, marginTop: "0.2rem" }}>{sc > 0 ? "+" : ""}{sc.toFixed(1)}/10</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </>
             )}
 
             {/* Summary table */}

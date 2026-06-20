@@ -44,6 +44,14 @@ export default function HomePage() {
         "Suivi de votre portefeuille réel avec recommandations Dollar-Cost Averaging personnalisées selon l'analyse technique et fondamentale.",
       badges: ["Renforcer", "Conserver", "Alléger"],
     },
+    {
+      href: "/backtest",
+      icon: "⏪",
+      title: "Backtesting",
+      description:
+        "Rejoue n'importe quelle stratégie sur des données historiques réelles (1–5 ans). Courbe d'equity, alpha vs Buy & Hold, win rate, Sharpe ratio — simulable même marché fermé.",
+      badges: ["Momentum", "Mean Rev.", "Breakout", "Combined"],
+    },
   ];
 
   return (
@@ -67,6 +75,7 @@ export default function HomePage() {
             { href: "/opportunities", label: "Opportunités" },
             { href: "/dca", label: "DCA Advisor" },
             { href: "/portfolio", label: "Mon Portefeuille" },
+            { href: "/backtest", label: "Backtest" },
           ].map((l) => (
             <Link
               key={l.href}
