@@ -316,6 +316,24 @@ interface TickerDetail {
   aiAnalysis: any | null;
   aiLoading: boolean;
   open: boolean;
+  // Phase 2 — deep analysis
+  deepAnalysis: DeepAnalysis | null;
+  deepLoading: boolean;
+  tickerNews: NewsItem[];
+  tickerNewsLoading: boolean;
+}
+
+interface DeepAnalysis {
+  bull_thesis: string;
+  bear_thesis: string;
+  macro_context: string;
+  business_quality: string;
+  timing_vs_value: string;
+  what_would_change: string[];
+  conviction: "faible" | "modérée" | "forte";
+  horizon: string;
+  verdict_final: string;
+  action: string;
 }
 
 const MARKET_COLORS: Record<string, string> = {
@@ -350,6 +368,10 @@ export default function OpportunitiesPage() {
   const [dcaPositions, setDcaPositions] = useState<Record<string, { shares: number; avg_price: number }>>({});
   const [verdictHistory, setVerdictHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [marketNews, setMarketNews] = useState<NewsItem[]>([]);
+  const [marketNewsPeriod, setMarketNewsPeriod] = useState<"today"|"week"|"month">("week");
+  const [marketNewsLoading, setMarketNewsLoading] = useState(false);
+  const [showMarketNews, setShowMarketNews] = useState(false);
 
   // Charger positions DCA et historique des verdicts au montage
   useEffect(() => {
@@ -446,7 +468,10 @@ export default function OpportunitiesPage() {
     // Init avec loading AI
     setDetails((prev) => ({
       ...prev,
-      [key]: { ticker: key, chartData: null, news: [], aiAnalysis: null, aiLoading: true, open: true },
+      [key]: {
+        ticker: key, chartData: null, news: [], aiAnalysis: null, aiLoading: true, open: true,
+        deepAnalysis: null, deepLoading: false, tickerNews: [], tickerNewsLoading: false,
+      },
     }));
     // Charger chart, news et analyse IA en parallèle
     const [chartData, news, aiAnalysis] = await Promise.allSettled([
@@ -454,6 +479,12 @@ export default function OpportunitiesPage() {
       getOpportunityNews(key),
       getAITickerAnalysis(opp),
     ]);
+    // Charger les news yfinance du ticker
+    const token = typeof window !== "undefined" ? localStorage.getItem("trading_token") : null;
+    const tickerNewsRes = await fetch(`/api/ticker-news/${key}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then(r => r.json()).catch(() => []);
+
     setDetails((prev) => ({
       ...prev,
       [key]: {
@@ -463,8 +494,48 @@ export default function OpportunitiesPage() {
         aiAnalysis: aiAnalysis.status === "fulfilled" ? aiAnalysis.value : null,
         aiLoading: false,
         open: true,
+        deepAnalysis: null, deepLoading: false,
+        tickerNews: Array.isArray(tickerNewsRes) ? tickerNewsRes : [],
+        tickerNewsLoading: false,
       },
     }));
+  };
+
+  const launchDeepAnalysis = async (opp: OpportunityScore) => {
+    const key = opp.ticker;
+    const det = details[key];
+    if (!det || det.deepLoading) return;
+    setDetails(prev => ({ ...prev, [key]: { ...prev[key], deepLoading: true, deepAnalysis: null } }));
+    const token = typeof window !== "undefined" ? localStorage.getItem("trading_token") : null;
+    try {
+      const res = await fetch("/api/opportunities/deep-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({
+          ticker: key,
+          score_data: opp,
+          news: det.tickerNews.slice(0, 8),
+        }),
+      });
+      const data = await res.json();
+      setDetails(prev => ({ ...prev, [key]: { ...prev[key], deepLoading: false, deepAnalysis: data } }));
+    } catch {
+      setDetails(prev => ({ ...prev, [key]: { ...prev[key], deepLoading: false } }));
+    }
+  };
+
+  const loadMarketNews = async (period: "today"|"week"|"month") => {
+    setMarketNewsLoading(true);
+    setMarketNewsPeriod(period);
+    const token = typeof window !== "undefined" ? localStorage.getItem("trading_token") : null;
+    try {
+      const res = await fetch(`/api/market-news?period=${period}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await res.json();
+      setMarketNews(Array.isArray(data) ? data : []);
+    } catch { setMarketNews([]); }
+    setMarketNewsLoading(false);
   };
 
   const filtered = results.filter((r) => r.score >= minScore);
@@ -581,6 +652,53 @@ export default function OpportunitiesPage() {
             </div>
           </div>
         ))}
+
+        <hr style={{ borderColor: "var(--border)", marginBottom: "1rem" }} />
+
+        {/* Actualités marché */}
+        <div style={{ marginBottom: "1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
+            <div style={{ fontSize: "0.68rem", fontWeight: 700, color: GOLD, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+              📰 Actualités marché EU
+            </div>
+            <button
+              onClick={() => { setShowMarketNews(v => !v); if (!showMarketNews && marketNews.length === 0) loadMarketNews("week"); }}
+              style={{ fontSize: "0.58rem", background: "none", border: "1px solid var(--border)", borderRadius: 3, padding: "0.1rem 0.35rem", cursor: "pointer", color: "var(--text-muted)" }}
+            >
+              {showMarketNews ? "Masquer" : "Afficher"}
+            </button>
+          </div>
+          {showMarketNews && (
+            <div>
+              <div style={{ display: "flex", gap: "0.3rem", marginBottom: "0.5rem" }}>
+                {(["today", "week", "month"] as const).map(p => (
+                  <button key={p} onClick={() => loadMarketNews(p)} style={{
+                    fontSize: "0.62rem", padding: "0.15rem 0.4rem", borderRadius: 3, cursor: "pointer",
+                    background: marketNewsPeriod === p ? GOLD : "var(--surface2)",
+                    border: `1px solid ${marketNewsPeriod === p ? GOLD : "var(--border)"}`,
+                    color: marketNewsPeriod === p ? "#000" : "var(--text-muted)", fontWeight: marketNewsPeriod === p ? 700 : 400,
+                  }}>
+                    {p === "today" ? "Aujourd'hui" : p === "week" ? "Semaine" : "Mois"}
+                  </button>
+                ))}
+              </div>
+              {marketNewsLoading && <div style={{ fontSize: "0.7rem", color: "#8892a4" }}>Chargement…</div>}
+              {!marketNewsLoading && marketNews.length === 0 && <div style={{ fontSize: "0.7rem", color: "#8892a4" }}>Aucune actualité trouvée.</div>}
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", maxHeight: 280, overflowY: "auto" }}>
+                {marketNews.slice(0, 15).map((n, i) => (
+                  <a key={i} href={n.link} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                    <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 4, padding: "0.4rem 0.5rem" }}>
+                      <div style={{ fontSize: "0.68rem", color: "#e8eaf0", lineHeight: 1.4 }}>{n.title}</div>
+                      <div style={{ fontSize: "0.6rem", color: "#8892a4", marginTop: "0.2rem" }}>
+                        {n.source} {n.published ? `· ${new Date(n.published).toLocaleDateString("fr-FR")}` : ""}
+                      </div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         <hr style={{ borderColor: "var(--border)", marginBottom: "1rem" }} />
 
@@ -1205,19 +1323,136 @@ export default function OpportunitiesPage() {
                                   />
                                 </div>
                               )}
-                              {/* News */}
-                              {det.news.length > 0 && (
-                                <div>
-                                  <p style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", margin: "0 0 0.5rem" }}>Actualités</p>
-                                  {det.news.map((item, i) => (
-                                    <p key={i} style={{ fontSize: "0.78rem", margin: "0.2rem 0" }}>
-                                      {item.published && <span style={{ color: "var(--text-muted)" }}>{item.published} — </span>}
-                                      <a href={item.link} target="_blank" rel="noreferrer" style={{ color: GOLD, textDecoration: "none" }}>{item.title}</a>
-                                      <span style={{ color: "var(--text-muted)" }}> · {item.source}</span>
-                                    </p>
+                              {/* News ticker (yfinance) */}
+                              {(det.tickerNews?.length > 0 || det.news.length > 0) && (
+                                <div style={{ marginBottom: "1rem" }}>
+                                  <p style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", margin: "0 0 0.5rem" }}>
+                                    Actualités récentes
+                                  </p>
+                                  {(det.tickerNews?.length > 0 ? det.tickerNews : det.news).map((item, i) => (
+                                    <a key={i} href={item.link} target="_blank" rel="noreferrer" style={{ textDecoration: "none", display: "block", marginBottom: "0.35rem" }}>
+                                      <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 4, padding: "0.4rem 0.6rem" }}>
+                                        <div style={{ fontSize: "0.74rem", color: "#e8eaf0", lineHeight: 1.4 }}>{item.title}</div>
+                                        <div style={{ fontSize: "0.63rem", color: "#8892a4", marginTop: "0.15rem" }}>
+                                          {item.source}{item.published ? ` · ${new Date(item.published).toLocaleDateString("fr-FR")}` : ""}
+                                        </div>
+                                      </div>
+                                    </a>
                                   ))}
                                 </div>
                               )}
+
+                              {/* ── Phase 2 : Analyse approfondie ─────────────── */}
+                              <div style={{
+                                background: "linear-gradient(135deg, rgba(201,168,76,0.05), rgba(61,158,110,0.03))",
+                                border: "1px solid rgba(201,168,76,0.3)", borderRadius: 6, padding: "0.9rem 1rem",
+                                marginBottom: "0.5rem",
+                              }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem" }}>
+                                  <div>
+                                    <div style={{ fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: GOLD }}>
+                                      Phase 2 — Analyse approfondie
+                                    </div>
+                                    <div style={{ fontSize: "0.62rem", color: "#8892a4", marginTop: "0.1rem" }}>
+                                      Raisonnement d'analyste senior · thèse haussière/baissière · conviction
+                                    </div>
+                                  </div>
+                                  {!det.deepAnalysis && (
+                                    <button
+                                      onClick={() => launchDeepAnalysis(opp)}
+                                      disabled={det.deepLoading}
+                                      style={{
+                                        padding: "0.35rem 0.8rem", borderRadius: 4, cursor: det.deepLoading ? "not-allowed" : "pointer",
+                                        background: det.deepLoading ? "var(--surface2)" : GOLD,
+                                        color: det.deepLoading ? "#8892a4" : "#0d0f18",
+                                        border: "none", fontWeight: 700, fontSize: "0.72rem", whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {det.deepLoading ? "Analyse en cours…" : "🔍 Analyser"}
+                                    </button>
+                                  )}
+                                </div>
+
+                                {det.deepLoading && (
+                                  <div style={{ fontSize: "0.75rem", color: "#8892a4", padding: "0.5rem 0" }}>
+                                    Le modèle réfléchit… (10–20 secondes)
+                                  </div>
+                                )}
+
+                                {det.deepAnalysis && (() => {
+                                  const d = det.deepAnalysis;
+                                  const convColor = d.conviction === "forte" ? GREEN : d.conviction === "modérée" ? ORANGE : RED;
+                                  const actionColor: Record<string, string> = {
+                                    "acheter maintenant": GREEN, "renforcer progressivement": GREEN,
+                                    "attendre point d'entrée": GOLD, "conserver": GOLD,
+                                    "alléger": ORANGE, "éviter": RED,
+                                  };
+                                  return (
+                                    <div>
+                                      {/* Verdict + conviction */}
+                                      <div style={{ display: "flex", gap: "0.6rem", marginBottom: "0.8rem", flexWrap: "wrap" }}>
+                                        <span style={{ padding: "0.25rem 0.7rem", borderRadius: 20, fontWeight: 700, fontSize: "0.72rem", background: `${(actionColor[d.action] || GOLD)}22`, color: actionColor[d.action] || GOLD, border: `1px solid ${(actionColor[d.action] || GOLD)}55` }}>
+                                          {d.action?.toUpperCase()}
+                                        </span>
+                                        <span style={{ padding: "0.25rem 0.7rem", borderRadius: 20, fontWeight: 600, fontSize: "0.72rem", background: `${convColor}22`, color: convColor, border: `1px solid ${convColor}55` }}>
+                                          Conviction {d.conviction}
+                                        </span>
+                                        <span style={{ padding: "0.25rem 0.7rem", borderRadius: 20, fontWeight: 400, fontSize: "0.7rem", background: "var(--surface2)", color: "#a0aab8", border: "1px solid var(--border)" }}>
+                                          {d.horizon}
+                                        </span>
+                                      </div>
+
+                                      {/* Verdict final */}
+                                      <p style={{ fontSize: "0.8rem", color: "#e8eaf0", lineHeight: 1.6, margin: "0 0 0.9rem", fontStyle: "italic" }}>
+                                        "{d.verdict_final}"
+                                      </p>
+
+                                      {/* Thèses */}
+                                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem", marginBottom: "0.8rem" }}>
+                                        <div style={{ background: `${GREEN}11`, border: `1px solid ${GREEN}33`, borderRadius: 5, padding: "0.6rem 0.75rem" }}>
+                                          <div style={{ fontSize: "0.62rem", fontWeight: 700, color: GREEN, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "0.3rem" }}>▲ Thèse haussière</div>
+                                          <p style={{ fontSize: "0.74rem", color: "#c8d0dc", margin: 0, lineHeight: 1.5 }}>{d.bull_thesis}</p>
+                                        </div>
+                                        <div style={{ background: `${RED}11`, border: `1px solid ${RED}33`, borderRadius: 5, padding: "0.6rem 0.75rem" }}>
+                                          <div style={{ fontSize: "0.62rem", fontWeight: 700, color: RED, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "0.3rem" }}>▼ Thèse baissière</div>
+                                          <p style={{ fontSize: "0.74rem", color: "#c8d0dc", margin: 0, lineHeight: 1.5 }}>{d.bear_thesis}</p>
+                                        </div>
+                                      </div>
+
+                                      {/* Contexte macro + qualité + timing */}
+                                      {[
+                                        { label: "Contexte macro", val: d.macro_context, color: "#7b8fa6" },
+                                        { label: "Qualité du business", val: d.business_quality, color: GOLD },
+                                        { label: "Timing vs valorisation", val: d.timing_vs_value, color: ORANGE },
+                                      ].map(({ label, val, color }) => val ? (
+                                        <div key={label} style={{ marginBottom: "0.6rem" }}>
+                                          <div style={{ fontSize: "0.62rem", fontWeight: 700, color, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.2rem" }}>{label}</div>
+                                          <p style={{ fontSize: "0.74rem", color: "#a0aab8", margin: 0, lineHeight: 1.5 }}>{val}</p>
+                                        </div>
+                                      ) : null)}
+
+                                      {/* Ce qui changerait la thèse */}
+                                      {d.what_would_change?.length > 0 && (
+                                        <div>
+                                          <div style={{ fontSize: "0.62rem", fontWeight: 700, color: "#7b6fc4", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.3rem" }}>À surveiller</div>
+                                          <ul style={{ margin: 0, paddingLeft: "1rem" }}>
+                                            {d.what_would_change.map((s: string, i: number) => (
+                                              <li key={i} style={{ fontSize: "0.73rem", color: "#a0aab8", marginBottom: "0.2rem", lineHeight: 1.4 }}>{s}</li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+
+                                      <button
+                                        onClick={() => launchDeepAnalysis(opp)}
+                                        style={{ marginTop: "0.8rem", fontSize: "0.65rem", background: "none", border: "1px solid var(--border)", borderRadius: 3, padding: "0.2rem 0.5rem", cursor: "pointer", color: "#8892a4" }}
+                                      >
+                                        ↻ Relancer l'analyse
+                                      </button>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             </td>
                           </tr>
                         )}
