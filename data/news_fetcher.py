@@ -172,3 +172,74 @@ def get_sector_news(sector: str, max_results: int = 10) -> list[dict]:
             unique.append(item)
 
     return unique[:max_results]
+
+
+def get_ticker_news_yfinance(ticker: str, max_results: int = 8) -> list[dict]:
+    """Récupère les news yfinance (Google Finance) pour un ticker."""
+    import yfinance as yf
+    from datetime import datetime, timezone
+    try:
+        stock = yf.Ticker(ticker)
+        raw = stock.news or []
+        results = []
+        for item in raw[:max_results]:
+            content = item.get("content", {})
+            # yfinance ≥0.2.x wraps data in "content"
+            title = content.get("title") or item.get("title", "")
+            link  = (content.get("canonicalUrl", {}) or {}).get("url") or \
+                    content.get("clickThroughUrl", {}).get("url", "") or \
+                    item.get("link", "")
+            source = (content.get("provider", {}) or {}).get("displayName") or \
+                     item.get("publisher", "")
+            pub_ts = content.get("pubDate") or item.get("providerPublishTime")
+            published = None
+            if isinstance(pub_ts, str):
+                try:
+                    published = datetime.fromisoformat(pub_ts.replace("Z", "+00:00"))
+                except Exception:
+                    pass
+            elif isinstance(pub_ts, (int, float)):
+                published = datetime.fromtimestamp(pub_ts, tz=timezone.utc)
+            if title:
+                results.append({
+                    "title": title,
+                    "summary": content.get("summary", "") or item.get("summary", ""),
+                    "link": link,
+                    "source": source,
+                    "published": published,
+                })
+        return results
+    except Exception:
+        return []
+
+
+def get_market_news_eu(period: str = "week", max_results: int = 20) -> list[dict]:
+    """
+    Actualités marchés européens filtrées par période.
+    period: 'today' | 'week' | 'month'
+    """
+    from datetime import datetime, timedelta
+    cutoff_map = {"today": timedelta(days=1), "week": timedelta(days=7), "month": timedelta(days=30)}
+    cutoff = datetime.utcnow() - cutoff_map.get(period, timedelta(days=7))
+
+    all_news = fetch_rss_news(max_per_feed=30)
+    filtered = [n for n in all_news if n.get("published") and n["published"] >= cutoff]
+
+    # Also try major EU tickers news via yfinance for broad market pulse
+    eu_bellwethers = ["AIR.PA", "ASML.AS", "SAP.DE", "NOVO-B.CO", "LVMH.PA"]
+    for ticker in eu_bellwethers:
+        try:
+            ticker_news = get_ticker_news_yfinance(ticker, max_results=3)
+            for n in ticker_news:
+                if n.get("published") and n["published"].replace(tzinfo=None) >= cutoff:
+                    filtered.append(n)
+        except Exception:
+            continue
+
+    # Dedup by title
+    seen, unique = set(), []
+    for n in sorted(filtered, key=lambda x: x.get("published") or datetime.min, reverse=True):
+        if n["title"] not in seen:
+            seen.add(n["title"])
+            unique.append(n)
+    return unique[:max_results]

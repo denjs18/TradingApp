@@ -1133,6 +1133,166 @@ def portfolio_historical_prices():
     return jsonify(sanitize(results))
 
 
+# ── Actualités marché ──────────────────────────────────────────
+
+@app.route("/api/market-news", methods=["GET"])
+def market_news():
+    """Actualités marchés européens filtrées par période."""
+    from data.news_fetcher import get_market_news_eu
+    period = request.args.get("period", "week")
+    news = get_market_news_eu(period=period)
+    # Serialize dates
+    result = []
+    for n in news:
+        pub = n.get("published")
+        result.append({
+            **{k: v for k, v in n.items() if k != "published"},
+            "published": pub.isoformat() if pub else None,
+        })
+    return jsonify(result)
+
+
+@app.route("/api/ticker-news/<ticker>", methods=["GET"])
+def ticker_news(ticker: str):
+    """News yfinance + RSS pour un ticker spécifique."""
+    from data.news_fetcher import get_ticker_news_yfinance, get_news_for_ticker
+    max_r = int(request.args.get("max", 8))
+    news = get_ticker_news_yfinance(ticker.upper(), max_results=max_r)
+    if len(news) < 3:
+        # fallback to RSS
+        rss = get_news_for_ticker(ticker.upper(), max_results=max_r)
+        seen = {n["title"] for n in news}
+        for n in rss:
+            if n["title"] not in seen:
+                news.append(n)
+    result = []
+    for n in news[:max_r]:
+        pub = n.get("published")
+        result.append({
+            **{k: v for k, v in n.items() if k != "published"},
+            "published": pub.isoformat() if pub else None,
+        })
+    return jsonify(result)
+
+
+# ── Deep Analysis (Phase 2 — analyste senior) ─────────────────
+
+@app.route("/api/opportunities/deep-analysis", methods=["POST"])
+def deep_analysis():
+    """
+    Analyse approfondie d'un ticker via Groq — raisonnement d'analyste senior.
+    Reçoit les données brutes (scores, fondamentaux, news) et retourne
+    une analyse structurée avec thèse haussière/baissière, conviction, horizon.
+    """
+    import requests as req
+    import json as _json
+
+    user = get_current_user()
+    groq_key = (user or {}).get("groq_api_key") or os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        return jsonify({"error": "Clé Groq requise"}), 403
+
+    data = request.get_json() or {}
+    ticker   = data.get("ticker", "").upper()
+    score_data = data.get("score_data", {})   # OpportunityScore dict
+    news     = data.get("news", [])           # list of {title, source, published}
+
+    if not ticker:
+        return jsonify({"error": "ticker requis"}), 400
+
+    # Build a rich context string
+    name     = score_data.get("name", ticker)
+    sector   = score_data.get("sector", "N/A")
+    price    = score_data.get("current_price")
+    score    = score_data.get("score")
+    tech_s   = score_data.get("technical_score")
+    fund_s   = score_data.get("fundamental_score")
+    sent_s   = score_data.get("sentiment_score")
+    analyst_s= score_data.get("analyst_score")
+    rec      = score_data.get("recommendation", "")
+    trend    = score_data.get("trend", "")
+    target   = score_data.get("target_price")
+    stop     = score_data.get("stop_price")
+    gain_pct = score_data.get("gain_pct")
+    just     = score_data.get("justification", "")
+
+    # Fundamental raw metrics
+    roic          = score_data.get("roic")
+    fcf_margin    = score_data.get("fcf_margin")
+    net_debt_ebitda = score_data.get("net_debt_to_ebitda")
+    interest_cov  = score_data.get("interest_coverage")
+    ev_to_fcf     = score_data.get("ev_to_fcf")
+    pct_52w_high  = score_data.get("pct_from_52w_high")
+    pos_52w       = score_data.get("position_52w")
+    red_flags     = score_data.get("red_flags", [])
+    quality_grade = score_data.get("quality_grade")
+    is_etf        = score_data.get("is_etf", False)
+
+    news_block = ""
+    if news:
+        headlines = "\n".join(f"- [{n.get('source','?')}] {n.get('title','')}" for n in news[:8])
+        news_block = f"\n\nACTUALITÉS RÉCENTES :\n{headlines}"
+
+    red_flags_block = ""
+    if red_flags:
+        red_flags_block = f"\nSIGNAUX D'ALARME DÉTECTÉS : {', '.join(red_flags)}"
+
+    prompt = f"""Tu es un gérant de portefeuille senior avec 20 ans d'expérience sur les marchés européens.
+Tu dois produire une analyse d'investissement rigoureuse et nuancée sur {name} ({ticker}).
+Tu n'es pas un chatbot qui reformule des chiffres — tu RÉFLÉCHIS vraiment, tu argumentes, tu prends du recul.
+
+=== DONNÉES DISPONIBLES ===
+Entreprise : {name} ({ticker}) | Secteur : {sector}
+Prix actuel : {price} € | Note algorithmique : {score}/10 (ce n'est qu'un indicateur parmi d'autres)
+Scores composites : Technique={tech_s} | Fondamental={fund_s} | Sentiment={sent_s} | Analystes={analyst_s}
+Tendance technique : {trend} | Recommandation algorithme : {rec}
+Objectif moyen analystes : {target} € | Upside potentiel : {gain_pct}%
+ROIC : {roic} | FCF Margin : {fcf_margin} | Net Debt/EBITDA : {net_debt_ebitda}
+Couverture intérêts : {interest_cov}x | EV/FCF : {ev_to_fcf}
+Position dans range 52 semaines : {pos_52w}% (0%=plancher annuel, 100%=sommet)
+Distance du sommet 52 semaines : {pct_52w_high}%
+Note qualité business : {quality_grade}{" | ETF (pas de fondamentaux individuels)" if is_etf else ""}
+Justification scoring : {just}{red_flags_block}{news_block}
+
+=== TON TRAVAIL ===
+Analyse cette action comme si tu devais décider d'investir 50 000 € de ton propre argent.
+Ne te contente PAS de paraphraser les chiffres ci-dessus. Apporte du JUGEMENT, du CONTEXTE, de la RÉFLEXION.
+
+Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
+{{
+  "bull_thesis": "En 2-3 phrases : les arguments POUR investir maintenant. Quels sont les catalyseurs, les avantages compétitifs, pourquoi le marché sous-estime peut-être cette valeur.",
+  "bear_thesis": "En 2-3 phrases : les arguments CONTRE. Les risques réels, ce qui pourrait mal tourner, les faiblesses structurelles.",
+  "macro_context": "En 1-2 phrases : où en est ce secteur dans le cycle économique actuel ? Vents portants ou contraires macro ?",
+  "business_quality": "En 1-2 phrases : qualité intrinsèque du business — moat, pricing power, récurrence des revenus, dépendance réglementaire.",
+  "timing_vs_value": "En 1-2 phrases : est-ce le bon moment d'acheter ? Action de qualité mais chère ? Décote injustifiée ? Attendre un meilleur point d'entrée ?",
+  "what_would_change": ["Signal ou événement 1 qui réviserait cette analyse à la hausse", "Signal ou événement 2 à surveiller", "Signal ou événement 3"],
+  "conviction": "faible" | "modérée" | "forte",
+  "horizon": "court terme (< 3 mois)" | "moyen terme (6-12 mois)" | "long terme (2-3 ans)",
+  "verdict_final": "En 2-3 phrases : synthèse finale, ce que TU ferais avec cette action aujourd'hui et pourquoi.",
+  "action": "acheter maintenant" | "attendre point d'entrée" | "renforcer progressivement" | "conserver" | "éviter" | "alléger"
+}}"""
+
+    try:
+        resp = req.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.4,
+                "max_tokens": 1200,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=45,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        result = _json.loads(content)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Backtesting ────────────────────────────────────────────────
 
 @app.route("/api/backtest", methods=["POST"])
