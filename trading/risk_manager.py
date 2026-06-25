@@ -129,8 +129,8 @@ class RiskManager:
         else:
             amount = max_amount
 
-        # Limiter au max
-        amount = min(amount, max_amount)
+        # Limiter au max, avec marge pour le spread simulé (évite rejet sur arrondi)
+        amount = min(amount, max_amount) * 0.998
 
         shares = amount / price if price > 0 else 0
         position_pct = (amount / portfolio_value * 100) if portfolio_value > 0 else 0

@@ -108,16 +108,25 @@ class PaperTradingEngine:
         if total_cost > cash:
             return {"success": False, "error": f"Fonds insuffisants ({cash:.2f} EUR disponibles)"}
 
-        # Verifier le nombre max de positions
+        # Verifier le nombre max de positions (lire depuis les settings pour respecter le mode)
         open_positions = self.get_open_positions()
-        if len(open_positions) >= DEFAULT_MAX_OPEN_POSITIONS:
-            return {"success": False, "error": f"Max {DEFAULT_MAX_OPEN_POSITIONS} positions ouvertes"}
+        try:
+            from database.db import get_db as _gdb
+            from config import DEFAULT_MAX_OPEN_POSITIONS as _def_max
+            with _gdb() as _conn:
+                _row = _conn.execute("SELECT value FROM settings WHERE key = 'max_positions'").fetchone()
+                effective_max_positions = int(_row["value"]) if _row else _def_max
+        except Exception:
+            effective_max_positions = DEFAULT_MAX_OPEN_POSITIONS
+        if len(open_positions) >= effective_max_positions:
+            return {"success": False, "error": f"Max {effective_max_positions} positions ouvertes"}
 
-        # Verifier la taille max de position
+        # Verifier la taille max de position (avec tolérance spread pour éviter rejet sur arrondi)
         portfolio_value = self._get_portfolio_value()
         if portfolio_value > 0:
             position_pct = (total_cost / portfolio_value) * 100
-            if position_pct > DEFAULT_MAX_POSITION_PCT:
+            # +0.5% de tolérance pour absorber le spread simulé et les arrondis
+            if position_pct > DEFAULT_MAX_POSITION_PCT + 0.5:
                 return {
                     "success": False,
                     "error": f"Position trop grande ({position_pct:.1f}% > max {DEFAULT_MAX_POSITION_PCT}%)",
