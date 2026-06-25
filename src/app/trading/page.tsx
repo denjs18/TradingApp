@@ -614,6 +614,15 @@ export default function TradingPage() {
             >
               {cycleRunning ? "⟳ Analyse…" : "⟳ Cycle maintenant"}
             </button>
+            <a
+              href="/api/portfolio/export-csv"
+              download
+              className="btn btn-secondary"
+              style={{ fontSize: "0.75rem", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}
+              title="Exporter la session en CSV"
+            >
+              ↓ Export CSV
+            </a>
           </div>
         </div>
 

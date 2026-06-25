@@ -353,6 +353,93 @@ def portfolio_trades():
     return jsonify(trades)
 
 
+@app.route("/api/portfolio/export-csv")
+def portfolio_export_csv():
+    """Exporte la session de trading complète en CSV."""
+    import csv, io
+    from datetime import datetime
+
+    summary = engine.get_portfolio_summary()
+    metrics = engine.get_performance_metrics()
+    trades = engine.get_all_trades()
+    open_positions = engine.get_open_positions()
+
+    output = io.StringIO()
+
+    # ── Section 1 : Résumé de session ──────────────────────────
+    output.write("=== RÉSUMÉ DE SESSION ===\n")
+    w = csv.writer(output)
+    w.writerow(["Métrique", "Valeur"])
+    w.writerow(["Date export", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+    w.writerow(["Capital initial (€)", summary.get("initial_balance", "")])
+    w.writerow(["Valeur totale (€)", summary.get("total_value", "")])
+    w.writerow(["Cash disponible (€)", summary.get("cash", "")])
+    w.writerow(["P&L total (€)", summary.get("total_pnl", "")])
+    w.writerow(["P&L total (%)", summary.get("total_pnl_pct", "")])
+    w.writerow(["Positions ouvertes", summary.get("num_positions", 0)])
+    w.writerow(["Valeur positions (€)", summary.get("positions_value", "")])
+    w.writerow([])
+    w.writerow(["=== MÉTRIQUES DE PERFORMANCE ==="])
+    w.writerow(["Win Rate (%)", metrics.get("win_rate", 0)])
+    w.writerow(["Trades total", metrics.get("total_trades", 0)])
+    w.writerow(["Trades clôturés", metrics.get("closed_trades", 0)])
+    w.writerow(["P&L réalisé (€)", metrics.get("total_pnl", 0)])
+    w.writerow(["Max Drawdown (€)", metrics.get("max_drawdown", 0)])
+    w.writerow(["Sharpe Ratio", metrics.get("sharpe_ratio", 0)])
+    w.writerow([])
+
+    # ── Section 2 : Historique des trades ──────────────────────
+    w.writerow(["=== HISTORIQUE DES TRADES ==="])
+    w.writerow(["Date/Heure", "Ticker", "Type", "Actions", "Prix (€)", "Total (€)", "Stratégie", "Raison", "Stop-Loss", "Take-Profit"])
+    for t in trades:
+        w.writerow([
+            t.get("executed_at", ""),
+            t.get("ticker", ""),
+            "ACHAT" if t.get("side") == "buy" else "VENTE",
+            round(t.get("shares", 0), 4),
+            round(t.get("price", 0), 4),
+            round(t.get("total", 0), 2),
+            t.get("strategy", ""),
+            t.get("reason", ""),
+            t.get("stop_loss", ""),
+            t.get("take_profit", ""),
+        ])
+    w.writerow([])
+
+    # ── Section 3 : Positions ouvertes ─────────────────────────
+    w.writerow(["=== POSITIONS OUVERTES ==="])
+    w.writerow(["Ticker", "Actions", "Prix entrée (€)", "Prix actuel (€)", "Valeur (€)", "P&L (€)", "P&L (%)", "Stop-Loss", "Take-Profit", "Ouvert le"])
+    for p in open_positions:
+        entry = p.get("entry_price", 0) or 0
+        current = p.get("current_price", 0) or entry
+        shares = p.get("shares", 0) or 0
+        pnl = (current - entry) * shares
+        pnl_pct = ((current - entry) / entry * 100) if entry else 0
+        w.writerow([
+            p.get("ticker", ""),
+            round(shares, 4),
+            round(entry, 4),
+            round(current, 4),
+            round(current * shares, 2),
+            round(pnl, 2),
+            round(pnl_pct, 2),
+            p.get("stop_loss", ""),
+            p.get("take_profit", ""),
+            p.get("opened_at", ""),
+        ])
+
+    csv_content = output.getvalue()
+    output.close()
+
+    from flask import Response
+    filename = f"trading_session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        csv_content,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @app.route("/api/portfolio/logs")
 def portfolio_logs():
     limit = int(request.args.get("limit", 50))
