@@ -110,15 +110,21 @@ class PaperTradingEngine:
         if len(open_positions) >= effective_max_positions:
             return {"success": False, "error": f"Max {effective_max_positions} positions ouvertes"}
 
-        # Verifier la taille max de position (avec tolérance spread pour éviter rejet sur arrondi)
+        # Verifier la taille max de position (lire depuis settings pour respecter le profil)
         portfolio_value = self._get_portfolio_value()
         if portfolio_value > 0:
             position_pct = (total_cost / portfolio_value) * 100
+            try:
+                with get_db() as _conn:
+                    _row = _conn.execute("SELECT value FROM settings WHERE key = 'max_position'").fetchone()
+                    effective_max_pct = float(_row["value"]) if _row else DEFAULT_MAX_POSITION_PCT
+            except Exception:
+                effective_max_pct = DEFAULT_MAX_POSITION_PCT
             # +0.5% de tolérance pour absorber le spread simulé et les arrondis
-            if position_pct > DEFAULT_MAX_POSITION_PCT + 0.5:
+            if position_pct > effective_max_pct + 0.5:
                 return {
                     "success": False,
-                    "error": f"Position trop grande ({position_pct:.1f}% > max {DEFAULT_MAX_POSITION_PCT}%)",
+                    "error": f"Position trop grande ({position_pct:.1f}% > max {effective_max_pct}%)",
                 }
 
         # Verifier si on a deja une position ouverte
