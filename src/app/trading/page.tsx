@@ -29,10 +29,10 @@ const CYAN = "#3db8c8";
 const CYCLE_INTERVAL_SECONDS = 90;
 
 const TRADING_MODES = {
-  conservative: { name: "Conservateur", description: "24 tickers · cycle 2min · seuils stricts", color: "#3d9e6e", interval: 120 },
-  standard:     { name: "Standard",     description: "24 tickers · cycle 1min · équilibré",      color: "#4a8fd4", interval: 60  },
-  aggressive:   { name: "Agressif",     description: "100 tickers · cycle 45s · seuils bas",     color: "#d4834a", interval: 45  },
-  ultra:        { name: "Ultra 🔥",     description: "300+ tickers · cycle 30s · rotation auto",  color: "#c84848", interval: 30  },
+  conservative: { name: "Conservateur", description: "24 tickers · 2min · 3 pos · 15%/pos",   color: "#3d9e6e", interval: 120 },
+  standard:     { name: "Standard",     description: "24 tickers · 1min · 5 pos · 20%/pos",   color: "#4a8fd4", interval: 60  },
+  aggressive:   { name: "Agressif",     description: "100 tickers · 45s · 15 pos · 7%/pos",   color: "#d4834a", interval: 45  },
+  ultra:        { name: "Ultra 🔥",     description: "300+ tickers · 30s · 25 pos · 4%/pos",  color: "#c84848", interval: 30  },
 } as const;
 
 type TradingMode = keyof typeof TRADING_MODES;
@@ -314,9 +314,10 @@ export default function TradingPage() {
       });
       setTradingMode(mode);
       mutateMode();
+      mutateSettings(); // rafraîchir les settings car le mode les a mis à jour
       const m = TRADING_MODES[mode];
       addEvent({ type: "info", message: `Mode changé : ${m.name} — ${m.description}` });
-      msg(`Mode "${m.name}" activé.`);
+      msg(`Mode "${m.name}" activé — paramètres de risque mis à jour.`);
     } finally {
       setModeChanging(false);
     }

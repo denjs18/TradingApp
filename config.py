@@ -120,7 +120,7 @@ TRADING_MODES = {
     },
     "aggressive": {
         "name": "Agressif",
-        "description": "100 tickers · cycle 45s · seuils bas",
+        "description": "100 tickers · cycle 45s · 15 positions · 7%/pos",
         "interval_seconds": 45,
         "buy_threshold": 0.15,
         "sell_threshold": -0.15,
@@ -133,7 +133,7 @@ TRADING_MODES = {
     },
     "ultra": {
         "name": "Ultra Agressif",
-        "description": "300+ tickers · cycle 30s · rotation auto",
+        "description": "300+ tickers · cycle 30s · 25 positions · 4%/pos",
         "interval_seconds": 30,
         "buy_threshold": 0.05,
         "sell_threshold": -0.05,

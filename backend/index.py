@@ -1499,19 +1499,30 @@ def trading_get_mode():
 
 @app.route("/api/trading/mode", methods=["POST"])
 def trading_set_mode():
-    """Change le mode de trading."""
+    """Change le mode de trading et met à jour tous les paramètres de risque associés."""
     from config import TRADING_MODES, DEFAULT_TRADING_MODE
     data = request.get_json() or {}
     mode = data.get("mode", DEFAULT_TRADING_MODE)
     if mode not in TRADING_MODES:
         return jsonify({"error": f"Mode inconnu: {mode}"}), 400
-    set_setting("trading_mode", mode)
+
     mode_info = TRADING_MODES[mode]
+    set_setting("trading_mode", mode)
+    # Synchroniser tous les paramètres de risque avec le mode choisi
+    set_setting("max_position", str(mode_info["max_position_pct"]))
+    set_setting("max_positions", str(mode_info["max_positions"]))
+    set_setting("stop_loss", str(mode_info["stop_loss_pct"]))
+    set_setting("take_profit", str(mode_info["take_profit_pct"]))
+
     return jsonify({
         "success": True,
         "mode": mode,
         "name": mode_info["name"],
         "description": mode_info["description"],
+        "max_position_pct": mode_info["max_position_pct"],
+        "max_positions": mode_info["max_positions"],
+        "stop_loss_pct": mode_info["stop_loss_pct"],
+        "take_profit_pct": mode_info["take_profit_pct"],
     })
 
 
