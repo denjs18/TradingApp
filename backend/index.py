@@ -1399,6 +1399,35 @@ def get_pea_tickers():
     return jsonify(ALL_PEA_TICKERS)
 
 
+@app.route("/api/trading/mode", methods=["GET"])
+def trading_get_mode():
+    """Retourne le mode de trading actuel et les modes disponibles."""
+    from config import TRADING_MODES, DEFAULT_TRADING_MODE
+    current = get_setting("trading_mode", DEFAULT_TRADING_MODE)
+    return jsonify({
+        "current_mode": current,
+        "modes": TRADING_MODES,
+    })
+
+
+@app.route("/api/trading/mode", methods=["POST"])
+def trading_set_mode():
+    """Change le mode de trading."""
+    from config import TRADING_MODES, DEFAULT_TRADING_MODE
+    data = request.get_json() or {}
+    mode = data.get("mode", DEFAULT_TRADING_MODE)
+    if mode not in TRADING_MODES:
+        return jsonify({"error": f"Mode inconnu: {mode}"}), 400
+    set_setting("trading_mode", mode)
+    mode_info = TRADING_MODES[mode]
+    return jsonify({
+        "success": True,
+        "mode": mode,
+        "name": mode_info["name"],
+        "description": mode_info["description"],
+    })
+
+
 @app.route("/api/trading/last-cycle")
 def trading_last_cycle():
     """Retourne les résultats du dernier cycle de trading."""
@@ -1444,65 +1473,82 @@ def _run_trading_cycle():
     """Logique du cycle de trading partagée entre cron et déclenchement manuel."""
     import json as _json
     from datetime import datetime
-    from config import SCORE_BUY_THRESHOLD, SCORE_SELL_THRESHOLD
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from config import TRADING_MODES, DEFAULT_TRADING_MODE, ALL_PEA_TICKERS
 
     settings = _get_risk_settings()
     risk_manager = _get_risk_manager()
+
+    # Récupérer le mode courant
+    current_mode = get_setting("trading_mode", DEFAULT_TRADING_MODE)
+    mode_cfg = TRADING_MODES.get(current_mode, TRADING_MODES[DEFAULT_TRADING_MODE])
+    buy_threshold = mode_cfg["buy_threshold"]
+    sell_threshold = mode_cfg["sell_threshold"]
+    max_positions = mode_cfg["max_positions"]
+    max_workers = mode_cfg["max_workers"]
+
+    # Déterminer la liste de tickers selon le mode
+    ticker_count = mode_cfg.get("ticker_count")
+    if ticker_count is None:
+        tickers = list(ALL_PEA_TICKERS)
+    elif ticker_count <= 24:
+        tickers = [t for t in settings["tickers"] if t]
+    else:
+        tickers = list(ALL_PEA_TICKERS[:ticker_count])
 
     can_trade = risk_manager.can_trade()
     if not can_trade["allowed"]:
         return jsonify({"skipped": can_trade["reason"]})
 
-    results = {"actions": [], "checks": []}
+    results = {"actions": [], "checks": [], "mode": current_mode, "tickers_count": len(tickers)}
 
     # 1. Stop-loss / take-profit
     executed = engine.check_stop_loss_take_profit()
     results["actions"].extend(executed)
 
-    # 2. Analyser chaque ticker
-    for ticker in settings["tickers"]:
-        if not ticker:
-            continue
+    # 2. Analyse parallèle
+    def analyse_one(ticker):
         try:
             result = run_strategy(ticker, settings["strategy"])
             price = get_current_price(ticker)
-            has_position = bool(engine.get_position_for_ticker(ticker))
-
-            # Raison de non-trade
-            decision = "attente"
-            reason = result.get("details", "")
-            if result["signal"] == "achat":
-                if result["score"] > SCORE_BUY_THRESHOLD:
-                    if has_position:
-                        decision = "déjà en position"
-                    elif not price:
-                        decision = "prix indisponible"
-                    else:
-                        decision = "signal achat → ACHAT"
-                else:
-                    decision = f"signal achat mais score trop faible ({result['score']:.2f} < {SCORE_BUY_THRESHOLD})"
-            elif result["signal"] == "vente":
-                if result["score"] < SCORE_SELL_THRESHOLD:
-                    if has_position:
-                        decision = "signal vente → VENTE"
-                    else:
-                        decision = "signal vente mais pas en position"
-                else:
-                    decision = f"signal vente mais score trop élevé ({result['score']:.2f})"
-            else:
-                decision = "signal neutre — aucune action"
-
-            check = {
+            return {
                 "ticker": ticker,
-                "signal": result["signal"],
-                "score": round(float(result["score"]), 2),
+                "signal": result.get("signal", "neutre"),
+                "score": round(float(result.get("score", 0)), 2),
                 "price": price,
-                "has_position": has_position,
-                "decision": decision,
-                "details": reason[:120] if reason else "",
+                "details": (result.get("details", "") or "")[:120],
+                "error": None,
             }
+        except Exception as e:
+            return {"ticker": ticker, "signal": "neutre", "score": 0.0, "price": None, "details": "", "error": str(e)[:80]}
 
-            if result["signal"] == "achat" and result["score"] > SCORE_BUY_THRESHOLD and not has_position and price:
+    raw_results = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(analyse_one, t): t for t in tickers}
+        for future in as_completed(futures):
+            raw_results.append(future.result())
+
+    # Trier par score décroissant
+    raw_results.sort(key=lambda r: r["score"], reverse=True)
+
+    open_positions = engine.get_open_positions()
+    position_tickers = {p["ticker"] for p in open_positions}
+
+    for res in raw_results:
+        ticker = res["ticker"]
+        has_pos = ticker in position_tickers
+        res["has_position"] = has_pos
+
+        if res["error"]:
+            res["decision"] = f"erreur"
+            results["checks"].append(res)
+            continue
+
+        decision = ""
+        price = res["price"]
+
+        if res["signal"] == "achat" and res["score"] > buy_threshold and not has_pos and price:
+            if len([p for p in open_positions if p["ticker"] in position_tickers]) < max_positions:
                 sizing = risk_manager.calculate_position_size(engine._get_portfolio_value(), price)
                 stop_loss = risk_manager.calculate_stop_loss(price, ticker)
                 take_profit = risk_manager.calculate_take_profit(price, ticker)
@@ -1512,25 +1558,70 @@ def _run_trading_cycle():
                     stop_loss=stop_loss,
                     take_profit=take_profit,
                     strategy=settings["strategy"],
-                    reason=reason,
+                    reason=res["details"],
                 )
-                if trade_result["success"]:
-                    results["actions"].append({"type": "buy", "trade": trade_result})
-                    check["decision"] = f"✓ ACHAT exécuté — {sizing['shares']:.2f} actions à {price:.2f}€"
+                if trade_result.get("success"):
+                    results["actions"].append({"type": "buy", "ticker": ticker, "price": price, "shares": sizing["shares"], "trade": trade_result})
+                    position_tickers.add(ticker)
+                    decision = f"✓ ACHAT @ {price:.2f}€"
+                else:
+                    decision = "✗ Rejeté"
+            else:
+                # Auto-rotation : remplacer la pire position
+                scores_map = {r["ticker"]: r["score"] for r in raw_results}
+                worst_ticker = None
+                worst_score = res["score"]
+                for pt in list(position_tickers):
+                    sc = scores_map.get(pt, 0)
+                    if sc < worst_score:
+                        worst_score = sc
+                        worst_ticker = pt
+                if worst_ticker:
+                    sell_res = engine.sell(ticker=worst_ticker, strategy=settings["strategy"], reason=f"Rotation → {ticker}")
+                    if sell_res.get("success"):
+                        position_tickers.discard(worst_ticker)
+                        results["actions"].append({"type": "sell", "ticker": worst_ticker, "trade": sell_res, "reason": "rotation"})
+                        sizing = risk_manager.calculate_position_size(engine._get_portfolio_value(), price)
+                        stop_loss = risk_manager.calculate_stop_loss(price, ticker)
+                        take_profit = risk_manager.calculate_take_profit(price, ticker)
+                        trade_result = engine.buy(
+                            ticker=ticker, shares=sizing["shares"],
+                            stop_loss=stop_loss, take_profit=take_profit,
+                            strategy=settings["strategy"], reason=res["details"],
+                        )
+                        if trade_result.get("success"):
+                            position_tickers.add(ticker)
+                            results["actions"].append({"type": "buy", "ticker": ticker, "price": price, "shares": sizing["shares"], "trade": trade_result})
+                            decision = f"⟳ ROTATION (vendu {worst_ticker})"
+                        else:
+                            decision = "⟳ Rotation partielle"
+                    else:
+                        decision = "Max positions"
+                else:
+                    decision = "Max positions"
 
-            elif result["signal"] == "vente" and result["score"] < SCORE_SELL_THRESHOLD and has_position:
-                trade_result = engine.sell(
-                    ticker=ticker,
-                    strategy=settings["strategy"],
-                    reason=reason,
-                )
-                if trade_result["success"]:
-                    results["actions"].append({"type": "sell", "trade": trade_result})
-                    check["decision"] = f"✓ VENTE exécutée à {price:.2f}€"
+        elif res["signal"] == "vente" and res["score"] < sell_threshold and has_pos:
+            trade_result = engine.sell(ticker=ticker, strategy=settings["strategy"], reason=res["details"])
+            if trade_result.get("success"):
+                position_tickers.discard(ticker)
+                results["actions"].append({"type": "sell", "ticker": ticker, "trade": trade_result})
+                decision = f"✓ VENTE @ {price:.2f}€" if price else "✓ VENTE"
+        elif res["signal"] == "achat" and res["score"] <= buy_threshold:
+            decision = f"score {res['score']:+.2f} < seuil {buy_threshold}"
+        elif res["signal"] == "neutre":
+            decision = ""
 
-            results["checks"].append(check)
-        except Exception as e:
-            results["checks"].append({"ticker": ticker, "error": str(e), "decision": f"erreur: {str(e)[:80]}"})
+        res["decision"] = decision
+        results["checks"].append({
+            "ticker": ticker,
+            "signal": res["signal"],
+            "score": res["score"],
+            "price": res["price"],
+            "has_position": has_pos,
+            "decision": decision,
+            "details": res["details"],
+            "error": res.get("error"),
+        })
 
     engine.save_snapshot()
 

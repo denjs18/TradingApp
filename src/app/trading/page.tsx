@@ -28,6 +28,15 @@ const CYAN = "#3db8c8";
 
 const CYCLE_INTERVAL_SECONDS = 90;
 
+const TRADING_MODES = {
+  conservative: { name: "Conservateur", description: "24 tickers · cycle 2min · seuils stricts", color: "#3d9e6e", interval: 120 },
+  standard:     { name: "Standard",     description: "24 tickers · cycle 1min · équilibré",      color: "#4a8fd4", interval: 60  },
+  aggressive:   { name: "Agressif",     description: "100 tickers · cycle 45s · seuils bas",     color: "#d4834a", interval: 45  },
+  ultra:        { name: "Ultra 🔥",     description: "300+ tickers · cycle 30s · rotation auto",  color: "#c84848", interval: 30  },
+} as const;
+
+type TradingMode = keyof typeof TRADING_MODES;
+
 const STRATEGY_DESCRIPTIONS: Record<string, string> = {
   momentum: "Suit la tendance haussière",
   mean_reversion: "Retour à la moyenne",
@@ -139,6 +148,8 @@ function EventTypeTag({ type }: { type: LiveEvent["type"] }) {
 }
 
 export default function TradingPage() {
+  const [tradingMode, setTradingMode] = useState<TradingMode>("standard");
+  const [modeChanging, setModeChanging] = useState(false);
   const [resetBalance, setResetBalance] = useState(10000);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -181,6 +192,8 @@ export default function TradingPage() {
   const { data: logs } = useSWR<TradingLog[]>("portfolio-logs", () => getPortfolioLogs(50) as any, { refreshInterval: 8000 });
   const { data: snapshots } = useSWR<PortfolioSnapshot[]>("portfolio-snapshots", getPortfolioSnapshots as any, { refreshInterval: 30000 });
   const { data: lastCycle, mutate: mutateLastCycle } = useSWR("last-cycle", getLastCycle, { refreshInterval: 10000 });
+  const { data: modeData, mutate: mutateMode } = useSWR("trading-mode", () => fetch("/api/trading/mode").then(r => r.json()), { refreshInterval: 30000 });
+  useEffect(() => { if (modeData?.current_mode) setTradingMode(modeData.current_mode as TradingMode); }, [modeData]);
 
   const [localSettings, setLocalSettings] = useState<RiskSettings>({
     strategy: "combined", tickers: ALL_TICKERS.slice(0, 5),
@@ -279,6 +292,25 @@ export default function TradingPage() {
     };
   }, [isEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleSetMode = async (mode: TradingMode) => {
+    setModeChanging(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("trading_token") : null;
+      await fetch("/api/trading/mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ mode }),
+      });
+      setTradingMode(mode);
+      mutateMode();
+      const m = TRADING_MODES[mode];
+      addEvent({ type: "info", message: `Mode changé : ${m.name} — ${m.description}` });
+      msg(`Mode "${m.name}" activé.`);
+    } finally {
+      setModeChanging(false);
+    }
+  };
+
   const handleStart = async () => {
     await startTrading(); mutateStatus();
     addEvent({ type: "info", message: "Trading automatique démarré — cycles auto toutes les " + CYCLE_INTERVAL_SECONDS + "s" });
@@ -371,6 +403,32 @@ export default function TradingPage() {
               {t === "dashboard" ? "Live" : t === "chart" ? "Chart" : "Config"}
             </button>
           ))}
+        </div>
+
+        {/* Mode de trading */}
+        <div style={{ marginBottom: "1rem" }}>
+          <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "0.5rem" }}>Mode de trading</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+            {(Object.entries(TRADING_MODES) as [TradingMode, typeof TRADING_MODES[TradingMode]][]).map(([key, m]) => {
+              const active = tradingMode === key;
+              return (
+                <button
+                  key={key}
+                  disabled={modeChanging}
+                  onClick={() => handleSetMode(key)}
+                  style={{
+                    padding: "0.45rem 0.6rem", borderRadius: 3, cursor: "pointer",
+                    background: active ? `rgba(${key === "ultra" ? "200,72,72" : key === "aggressive" ? "212,131,74" : key === "standard" ? "74,143,212" : "61,158,110"},0.12)` : "var(--surface2)",
+                    border: `1px solid ${active ? m.color : "var(--border)"}`,
+                    textAlign: "left", transition: "all 0.15s",
+                  }}
+                >
+                  <div style={{ fontSize: "0.72rem", fontWeight: 700, color: active ? m.color : "var(--text-secondary)" }}>{m.name}</div>
+                  <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", marginTop: "0.1rem" }}>{m.description}</div>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* AI Strategy Builder (always visible) */}
@@ -502,6 +560,22 @@ export default function TradingPage() {
               </div>
             </>
           )}
+
+          {/* Active mode + ticker count */}
+          <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            <span style={{
+              fontSize: "0.62rem", fontWeight: 700, padding: "0.15rem 0.45rem", borderRadius: 2,
+              background: `rgba(${tradingMode === "ultra" ? "200,72,72" : tradingMode === "aggressive" ? "212,131,74" : tradingMode === "standard" ? "74,143,212" : "61,158,110"},0.12)`,
+              border: `1px solid ${TRADING_MODES[tradingMode].color}`,
+              color: TRADING_MODES[tradingMode].color, textTransform: "uppercase", letterSpacing: "0.08em",
+            }}>
+              {TRADING_MODES[tradingMode].name}
+            </span>
+            {lastCycle?.tickers_count && (
+              <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{lastCycle.tickers_count} tickers</span>
+            )}
+          </div>
 
           {/* Cycle stats */}
           {cycleCount > 0 && (
