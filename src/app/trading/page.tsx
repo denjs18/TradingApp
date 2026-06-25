@@ -235,27 +235,38 @@ export default function TradingPage() {
       } else {
         const actions: any[] = data.actions ?? [];
         const checks: any[] = data.checks ?? [];
+        const modeLabel = data.mode ? ` [${data.mode}]` : "";
 
-        addEvent({ type: "cycle", message: `Cycle #${cycleCount + 1} — ${checks.length} ticker(s) analysé(s), ${actions.length} action(s)` });
+        addEvent({ type: "cycle", message: `Cycle #${cycleCount + 1}${modeLabel} — ${data.tickers_count ?? checks.length} ticker(s) analysé(s), ${actions.length} action(s)` });
 
         for (const a of actions) {
+          const isBuy = a.side === "buy";
+          const sharesVal = a.shares ?? a.trade?.shares;
+          const priceVal = a.price ?? a.trade?.price;
           addEvent({
-            type: a.side === "buy" ? "buy" : "sell",
-            ticker: a.ticker, price: a.price, shares: a.shares,
-            message: `${a.side === "buy" ? "Achat" : "Vente"} ${a.shares?.toFixed(2)} × ${a.ticker} @ ${a.price?.toFixed(2)}€ — ${a.reason ?? ""}`,
+            type: isBuy ? "buy" : "sell",
+            ticker: a.ticker,
+            price: priceVal,
+            shares: sharesVal,
+            message: `${isBuy ? "✓ Achat" : "✓ Vente"} ${sharesVal?.toFixed ? sharesVal.toFixed(2) : "?"} × ${a.ticker} @ ${priceVal?.toFixed ? priceVal.toFixed(2) : "?"}€${a.reason ? ` — ${a.reason}` : ""}`,
           });
         }
 
+        // Signaux non exécutés (tickers sans action correspondante)
+        const actionTickers = new Set(actions.map((a: any) => a.ticker));
         for (const c of checks) {
-          if (c.signal && c.signal !== "neutre" && !actions.find((a: any) => a.ticker === c.ticker)) {
+          if (c.decision?.startsWith("✓")) continue; // déjà dans actions
+          if (c.signal && c.signal !== "neutre" && !actionTickers.has(c.ticker) && c.decision) {
             addEvent({
               type: "signal", ticker: c.ticker,
-              message: `Signal ${c.signal?.toUpperCase()} sur ${c.ticker} (score ${c.score > 0 ? "+" : ""}${c.score}) — non exécuté`,
+              message: `Signal ${c.signal?.toUpperCase()} sur ${c.ticker} (score ${c.score > 0 ? "+" : ""}${c.score?.toFixed(2)}) — ${c.decision}`,
             });
           }
         }
 
-        mutatePortfolio(); mutateStatus(); mutateLastCycle(); mutateTrades();
+        // Rafraîchir le portefeuille après un délai court pour laisser la DB se mettre à jour
+        setTimeout(() => { mutatePortfolio(); mutateStatus(); mutateTrades(); }, 500);
+        mutateLastCycle();
       }
     } catch (e: any) {
       addEvent({ type: "error", message: `Erreur cycle : ${e.message}` });

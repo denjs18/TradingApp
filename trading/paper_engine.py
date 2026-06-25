@@ -73,22 +73,11 @@ class PaperTradingEngine:
         take_profit: Optional[float] = None,
         strategy: str = "",
         reason: str = "",
+        current_price: Optional[float] = None,  # prix déjà fetchés → évite un double-appel yfinance
     ) -> dict:
-        """Execute un ordre d'achat paper.
-
-        Args:
-            ticker: Symbole de l'action
-            shares: Nombre d'actions (prioritaire sur amount)
-            amount: Montant en EUR a investir
-            stop_loss: Prix de stop-loss
-            take_profit: Prix de take-profit
-            strategy: Nom de la strategie
-            reason: Raison de l'achat
-
-        Returns:
-            dict avec details de l'execution ou erreur.
-        """
-        price = get_current_price(ticker)
+        """Execute un ordre d'achat paper."""
+        # Utiliser le prix déjà fetchés si disponible, sinon re-fetch
+        price = current_price if current_price is not None else get_current_price(ticker)
         if price is None:
             return {"success": False, "error": f"Impossible d'obtenir le prix de {ticker}"}
 

@@ -1559,13 +1559,14 @@ def _run_trading_cycle():
                     take_profit=take_profit,
                     strategy=settings["strategy"],
                     reason=res["details"],
+                    current_price=price,
                 )
                 if trade_result.get("success"):
-                    results["actions"].append({"type": "buy", "ticker": ticker, "price": price, "shares": sizing["shares"], "trade": trade_result})
+                    results["actions"].append({"side": "buy", "ticker": ticker, "price": price, "shares": sizing["shares"], "trade": trade_result})
                     position_tickers.add(ticker)
                     decision = f"✓ ACHAT @ {price:.2f}€"
                 else:
-                    decision = "✗ Rejeté"
+                    decision = f"✗ Rejeté ({trade_result.get('error', '?')[:40]})"
             else:
                 # Auto-rotation : remplacer la pire position
                 scores_map = {r["ticker"]: r["score"] for r in raw_results}
@@ -1580,7 +1581,7 @@ def _run_trading_cycle():
                     sell_res = engine.sell(ticker=worst_ticker, strategy=settings["strategy"], reason=f"Rotation → {ticker}")
                     if sell_res.get("success"):
                         position_tickers.discard(worst_ticker)
-                        results["actions"].append({"type": "sell", "ticker": worst_ticker, "trade": sell_res, "reason": "rotation"})
+                        results["actions"].append({"side": "sell", "ticker": worst_ticker, "trade": sell_res, "reason": "rotation"})
                         sizing = risk_manager.calculate_position_size(engine._get_portfolio_value(), price)
                         stop_loss = risk_manager.calculate_stop_loss(price, ticker)
                         take_profit = risk_manager.calculate_take_profit(price, ticker)
@@ -1588,6 +1589,7 @@ def _run_trading_cycle():
                             ticker=ticker, shares=sizing["shares"],
                             stop_loss=stop_loss, take_profit=take_profit,
                             strategy=settings["strategy"], reason=res["details"],
+                            current_price=price,
                         )
                         if trade_result.get("success"):
                             position_tickers.add(ticker)
@@ -1604,7 +1606,7 @@ def _run_trading_cycle():
             trade_result = engine.sell(ticker=ticker, strategy=settings["strategy"], reason=res["details"])
             if trade_result.get("success"):
                 position_tickers.discard(ticker)
-                results["actions"].append({"type": "sell", "ticker": ticker, "trade": trade_result})
+                results["actions"].append({"side": "sell", "ticker": ticker, "price": price, "trade": trade_result})
                 decision = f"✓ VENTE @ {price:.2f}€" if price else "✓ VENTE"
         elif res["signal"] == "achat" and res["score"] <= buy_threshold:
             decision = f"score {res['score']:+.2f} < seuil {buy_threshold}"
