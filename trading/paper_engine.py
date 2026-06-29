@@ -90,6 +90,10 @@ class PaperTradingEngine:
         elif shares is None:
             return {"success": False, "error": "Specifier shares ou amount"}
 
+        # Garde-fou : refuser les trades fantômes (shares arrondi à ~0)
+        if shares <= 0 or shares * exec_price < 0.01:
+            return {"success": False, "error": f"Quantité trop faible ({shares:.6f} actions) — titre trop cher pour le budget"}
+
         total_cost = shares * exec_price
         cash = self.get_cash_balance()
 

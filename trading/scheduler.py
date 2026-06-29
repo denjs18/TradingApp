@@ -233,9 +233,11 @@ class TradingScheduler:
         if not open_positions:
             return False
 
-        # Trouver la position avec le score courant le plus bas
+        # Trouver la position avec le score courant le plus bas.
+        # Le nouveau signal doit être meilleur d'au moins ROTATION_SCORE_MARGIN (anti-churn).
+        from config import ROTATION_SCORE_MARGIN
         worst_pos = None
-        worst_score = signal["score"]  # le nouveau signal doit être meilleur
+        worst_score = signal["score"] - ROTATION_SCORE_MARGIN
         for pos in open_positions:
             pos_ticker = pos["ticker"]
             pos_result = results_map.get(pos_ticker)

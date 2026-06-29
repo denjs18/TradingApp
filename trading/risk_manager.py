@@ -136,7 +136,7 @@ class RiskManager:
         position_pct = (amount / portfolio_value * 100) if portfolio_value > 0 else 0
 
         return {
-            "shares": round(shares, 2),
+            "shares": round(shares, 6),  # 6 décimales : évite l'arrondi à 0 sur titres chers (ex: RHM.DE 950€)
             "amount": round(amount, 2),
             "position_pct": round(position_pct, 2),
         }

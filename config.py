@@ -148,6 +148,14 @@ TRADING_MODES = {
 
 DEFAULT_TRADING_MODE = "standard"
 
+# Marge de score minimale pour déclencher une rotation (anti-churn).
+# Une position n'est revendue au profit d'un nouveau signal que si ce dernier
+# a un score supérieur d'au moins cette marge → évite le sur-trading qui saigne sur le spread.
+ROTATION_SCORE_MARGIN = 0.30
+
+# Durée minimale (secondes) de détention avant qu'une position puisse être tournée.
+ROTATION_MIN_HOLD_SECONDS = 300
+
 # --- Parametres de marche ---
 MARKET_OPEN_HOUR = 9
 MARKET_OPEN_MINUTE = 0

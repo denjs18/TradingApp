@@ -332,7 +332,7 @@ def update_trading_settings():
 @app.route("/api/portfolio/summary")
 def portfolio_summary():
     summary = engine.get_portfolio_summary()
-    initial = DEFAULT_INITIAL_BALANCE
+    initial = float(get_setting("initial_balance", str(DEFAULT_INITIAL_BALANCE)))
     total_pnl = summary["total_value"] - initial
     return jsonify({
         **summary,
@@ -364,6 +364,11 @@ def portfolio_export_csv():
     trades = engine.get_all_trades()
     open_positions = engine.get_open_positions()
 
+    initial = float(get_setting("initial_balance", str(DEFAULT_INITIAL_BALANCE)))
+    total_value = summary.get("total_value", 0) or 0
+    total_pnl = total_value - initial
+    total_pnl_pct = (total_pnl / initial * 100) if initial > 0 else 0
+
     output = io.StringIO()
 
     # ── Section 1 : Résumé de session ──────────────────────────
@@ -371,11 +376,11 @@ def portfolio_export_csv():
     w = csv.writer(output)
     w.writerow(["Métrique", "Valeur"])
     w.writerow(["Date export", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
-    w.writerow(["Capital initial (€)", summary.get("initial_balance", "")])
-    w.writerow(["Valeur totale (€)", summary.get("total_value", "")])
-    w.writerow(["Cash disponible (€)", summary.get("cash", "")])
-    w.writerow(["P&L total (€)", summary.get("total_pnl", "")])
-    w.writerow(["P&L total (%)", summary.get("total_pnl_pct", "")])
+    w.writerow(["Capital initial (€)", round(initial, 2)])
+    w.writerow(["Valeur totale (€)", round(total_value, 2)])
+    w.writerow(["Cash disponible (€)", round(summary.get("cash", 0) or 0, 2)])
+    w.writerow(["P&L total (€)", round(total_pnl, 2)])
+    w.writerow(["P&L total (%)", round(total_pnl_pct, 2)])
     w.writerow(["Positions ouvertes", summary.get("num_positions", 0)])
     w.writerow(["Valeur positions (€)", summary.get("positions_value", "")])
     w.writerow([])
@@ -460,6 +465,7 @@ def portfolio_reset():
     data = request.get_json() or {}
     balance = float(data.get("balance", DEFAULT_INITIAL_BALANCE))
     set_setting("trading_enabled", "false")
+    set_setting("initial_balance", str(balance))  # mémoriser le capital de départ réel
     engine.reset(balance)
     return jsonify({"success": True})
 
@@ -1572,7 +1578,7 @@ def _run_trading_cycle():
     import json as _json
     from datetime import datetime
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    from config import TRADING_MODES, DEFAULT_TRADING_MODE, ALL_PEA_TICKERS
+    from config import TRADING_MODES, DEFAULT_TRADING_MODE, ALL_PEA_TICKERS, ROTATION_SCORE_MARGIN
 
     settings = _get_risk_settings()
     risk_manager = _get_risk_manager()
@@ -1666,10 +1672,12 @@ def _run_trading_cycle():
                 else:
                     decision = f"✗ Rejeté ({trade_result.get('error', '?')[:40]})"
             else:
-                # Auto-rotation : remplacer la pire position
+                # Auto-rotation : remplacer la pire position UNIQUEMENT si le nouveau
+                # signal est nettement meilleur (anti-churn, évite le saignement sur spread)
                 scores_map = {r["ticker"]: r["score"] for r in raw_results}
                 worst_ticker = None
-                worst_score = res["score"]
+                # Le candidat doit dépasser la pire position d'au moins ROTATION_SCORE_MARGIN
+                worst_score = res["score"] - ROTATION_SCORE_MARGIN
                 for pt in list(position_tickers):
                     sc = scores_map.get(pt, 0)
                     if sc < worst_score:
@@ -1691,14 +1699,14 @@ def _run_trading_cycle():
                         )
                         if trade_result.get("success"):
                             position_tickers.add(ticker)
-                            results["actions"].append({"type": "buy", "ticker": ticker, "price": price, "shares": sizing["shares"], "trade": trade_result})
+                            results["actions"].append({"side": "buy", "ticker": ticker, "price": price, "shares": sizing["shares"], "trade": trade_result})
                             decision = f"⟳ ROTATION (vendu {worst_ticker})"
                         else:
                             decision = "⟳ Rotation partielle"
                     else:
                         decision = "Max positions"
                 else:
-                    decision = "Max positions"
+                    decision = f"Max positions (signal pas assez fort pour rotation)"
 
         elif res["signal"] == "vente" and res["score"] < sell_threshold and has_pos:
             trade_result = engine.sell(ticker=ticker, strategy=settings["strategy"], reason=res["details"])
