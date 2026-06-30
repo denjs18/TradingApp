@@ -372,6 +372,10 @@ export default function OpportunitiesPage() {
   const [marketNewsPeriod, setMarketNewsPeriod] = useState<"today"|"week"|"month">("week");
   const [marketNewsLoading, setMarketNewsLoading] = useState(false);
   const [showMarketNews, setShowMarketNews] = useState(false);
+  // Tri / filtre post-analyse
+  const [sortBy, setSortBy] = useState<"score" | "price" | "gain" | "name">("score");
+  const [filterSector, setFilterSector] = useState<string>("");
+  const [bulkDeepRunning, setBulkDeepRunning] = useState(false);
 
   // Charger positions DCA et historique des verdicts au montage
   useEffect(() => {
@@ -503,10 +507,19 @@ export default function OpportunitiesPage() {
 
   const launchDeepAnalysis = async (opp: OpportunityScore) => {
     const key = opp.ticker;
-    const det = details[key];
-    if (!det || det.deepLoading) return;
-    setDetails(prev => ({ ...prev, [key]: { ...prev[key], deepLoading: true, deepAnalysis: null } }));
+    // Crée l'entrée si absente et marque le chargement (robuste même si le détail n'est pas ouvert)
+    setDetails(prev => ({
+      ...prev,
+      [key]: {
+        ...(prev[key] ?? {
+          ticker: key, chartData: null, news: [], aiAnalysis: null, aiLoading: false,
+          tickerNews: [], tickerNewsLoading: false,
+        }),
+        open: true, deepLoading: true, deepAnalysis: null,
+      },
+    }));
     const token = typeof window !== "undefined" ? localStorage.getItem("trading_token") : null;
+    const existingNews = details[key]?.tickerNews ?? [];
     try {
       const res = await fetch("/api/opportunities/deep-analysis", {
         method: "POST",
@@ -514,7 +527,7 @@ export default function OpportunitiesPage() {
         body: JSON.stringify({
           ticker: key,
           score_data: opp,
-          news: det.tickerNews.slice(0, 8),
+          news: existingNews.slice(0, 8),
         }),
       });
       const data = await res.json();
@@ -538,27 +551,88 @@ export default function OpportunitiesPage() {
     setMarketNewsLoading(false);
   };
 
-  const filtered = results.filter((r) => r.score >= minScore);
-  const highScore = filtered.filter((r) => r.score >= 7);
   const tickers = getTickerList();
 
-  // ── Grouper les résultats par catégorie sélectionnée ──────────────────
-  // Construit un index ticker → liste de catégories sélectionnées qui le contiennent
-  const tickerToCategories: Record<string, string[]> = {};
-  for (const sector of selectedSectors) {
-    for (const t of (SECTORS[sector] || [])) {
-      if (!tickerToCategories[t]) tickerToCategories[t] = [];
-      tickerToCategories[t].push(sector);
+  // ── Filtrage post-analyse : score min, prix max, secteur ──────────────
+  let displayed = results.filter((r) => r.score >= minScore);
+  if (maxPrice > 0) displayed = displayed.filter((r) => r.current_price != null && r.current_price <= maxPrice);
+  if (filterSector) displayed = displayed.filter((r) => (SECTORS[filterSector] || []).includes(r.ticker));
+  // ── Tri ──
+  displayed = [...displayed].sort((a, b) => {
+    if (sortBy === "price") return (a.current_price ?? 1e12) - (b.current_price ?? 1e12);
+    if (sortBy === "gain") return (b.gain_pct ?? -1e12) - (a.gain_pct ?? -1e12);
+    if (sortBy === "name") return (a.name || a.ticker).localeCompare(b.name || b.ticker);
+    return b.score - a.score;
+  });
+  const filtered = displayed; // alias utilisé par le tableau et le graphique
+  const highScore = displayed.filter((r) => r.score >= 7);
+
+  // Secteurs sélectionnés ayant au moins un résultat (pour le menu de filtre)
+  const sectorsWithResults = selectedSectors.filter(
+    (s) => (SECTORS[s] || []).some((t) => results.some((r) => r.ticker === t))
+  );
+
+  // ── Export CSV des résultats affichés (avec IA + Phase 2 si chargées) ──
+  const exportCSV = () => {
+    if (displayed.length === 0) return;
+    const esc = (v: any) => {
+      if (v == null) return "";
+      const s = String(v).replace(/"/g, '""');
+      return /[",\n;]/.test(s) ? `"${s}"` : s;
+    };
+    const headers = [
+      "Ticker", "Nom", "Score/10", "Recommandation", "Cours (€)", "Objectif (€)", "Gain potentiel %",
+      "Technique", "Fondamental", "Sentiment", "Analystes", "Qualité", "Position 52W %", "Justification",
+      "IA - Synthèse", "IA - Verdict",
+      "Phase2 - Action", "Phase2 - Conviction", "Phase2 - Horizon", "Phase2 - Verdict final",
+      "Phase2 - Thèse haussière", "Phase2 - Thèse baissière",
+    ];
+    const rows = displayed.map((opp) => {
+      const det = details[opp.ticker];
+      const ai = det?.aiAnalysis;
+      const d = det?.deepAnalysis;
+      const fund52 = (opp as any).details?.fundamental?.fundamentals;
+      const pos52w = fund52?.position_52w ?? (opp as any).position_52w;
+      return [
+        opp.ticker, opp.name ?? "", opp.score?.toFixed(2), opp.recommendation,
+        opp.current_price != null ? opp.current_price.toFixed(2) : "",
+        opp.target_price != null ? opp.target_price.toFixed(2) : "",
+        opp.gain_pct != null ? opp.gain_pct.toFixed(1) : "",
+        opp.technical_score?.toFixed(2), opp.fundamental_score?.toFixed(2),
+        opp.sentiment_score?.toFixed(2), opp.analyst_score != null ? opp.analyst_score.toFixed(2) : "",
+        opp.quality_grade ?? "", pos52w != null ? Number(pos52w).toFixed(0) : "",
+        opp.justification ?? "",
+        ai && !ai.error ? (ai.synthese ?? "") : "", ai && !ai.error ? (ai.verdict_final ?? "") : "",
+        d ? (d.action ?? "") : "", d ? (d.conviction ?? "") : "", d ? (d.horizon ?? "") : "",
+        d ? (d.verdict_final ?? "") : "", d ? (d.bull_thesis ?? "") : "", d ? (d.bear_thesis ?? "") : "",
+      ];
+    });
+    const csv = [headers, ...rows].map((r) => r.map(esc).join(",")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `opportunites_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Lancer Phase 2 sur tous les tickers affichés (séquentiel, ouvre le détail si besoin)
+  const runBulkDeepAnalysis = async () => {
+    if (bulkDeepRunning) return;
+    setBulkDeepRunning(true);
+    try {
+      for (const opp of displayed) {
+        if (details[opp.ticker]?.deepAnalysis) continue;
+        if (!details[opp.ticker]) {
+          await toggleDetail(opp);
+        }
+        await launchDeepAnalysis(opp);
+      }
+    } finally {
+      setBulkDeepRunning(false);
     }
-  }
-  // Pour chaque catégorie sélectionnée, liste des résultats triés par score
-  const resultsByCategory: Array<{ category: string; items: typeof filtered }> =
-    selectedSectors.map(sector => ({
-      category: sector,
-      items: filtered
-        .filter(r => (SECTORS[sector] || []).includes(r.ticker))
-        .sort((a, b) => b.score - a.score),
-    })).filter(g => g.items.length > 0);
+  };
 
   return (
     <div className="page-layout">
@@ -988,50 +1062,69 @@ export default function OpportunitiesPage() {
               </div>
             )}
 
-            {/* ── Résultats par catégorie ── */}
-            {resultsByCategory.length > 0 && selectedSectors.length > 1 && (
-              <>
-                <SectionTitle>Par catégorie</SectionTitle>
-                {resultsByCategory.map(({ category, items }) => (
-                  <div key={category} style={{ marginBottom: "1.25rem" }}>
-                    <div style={{
-                      fontSize: "0.7rem", fontWeight: 700, color: GOLD,
-                      textTransform: "uppercase", letterSpacing: "0.1em",
-                      marginBottom: "0.5rem", paddingBottom: "0.3rem",
-                      borderBottom: `1px solid rgba(201,168,76,0.25)`,
-                      display: "flex", alignItems: "center", gap: "0.5rem",
-                    }}>
-                      {category}
-                      <span style={{ color: "#8892a4", fontWeight: 400, fontSize: "0.65rem", textTransform: "none" }}>
-                        {items.length} titre{items.length > 1 ? "s" : ""}
-                      </span>
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-                      {items.map(opp => {
-                        const sc = opp.score;
-                        const col = sc >= 6 ? GREEN : sc >= 3 ? ORANGE : sc >= 0 ? GOLD : RED;
-                        return (
-                          <button
-                            key={opp.ticker}
-                            onClick={() => toggleDetail(opp)}
-                            style={{
-                              background: "var(--surface2)", border: `1px solid ${col}44`,
-                              borderLeft: `3px solid ${col}`, borderRadius: 4,
-                              padding: "0.4rem 0.7rem", cursor: "pointer", textAlign: "left",
-                              color: "var(--text-primary)", minWidth: 120,
-                            }}
-                          >
-                            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: col }}>{opp.ticker}</div>
-                            <div style={{ fontSize: "0.65rem", color: "#8892a4", marginTop: "0.1rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>{opp.name}</div>
-                            <div style={{ fontSize: "0.72rem", fontWeight: 600, color: col, marginTop: "0.2rem" }}>{sc > 0 ? "+" : ""}{sc.toFixed(1)}/10</div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
+            {/* ── Barre de filtres / tri / export ── */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap",
+              padding: "0.75rem 1rem", background: "var(--surface2)", border: "1px solid var(--border)",
+              borderRadius: 6, marginBottom: "1rem",
+            }}>
+              <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                {displayed.length} résultat{displayed.length > 1 ? "s" : ""}
+              </span>
+
+              <div style={{ width: 1, height: 18, background: "var(--border)" }} />
+
+              {/* Tri */}
+              <label style={{ fontSize: "0.68rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.4rem", margin: 0, textTransform: "none", letterSpacing: 0 }}>
+                Trier par
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="select" style={{ fontSize: "0.7rem", padding: "0.2rem 0.4rem", width: "auto" }}>
+                  <option value="score">Score ↓</option>
+                  <option value="gain">Gain potentiel ↓</option>
+                  <option value="price">Prix ↑</option>
+                  <option value="name">Nom A→Z</option>
+                </select>
+              </label>
+
+              {/* Filtre secteur */}
+              {sectorsWithResults.length > 1 && (
+                <label style={{ fontSize: "0.68rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.4rem", margin: 0, textTransform: "none", letterSpacing: 0 }}>
+                  Secteur
+                  <select value={filterSector} onChange={(e) => setFilterSector(e.target.value)} className="select" style={{ fontSize: "0.7rem", padding: "0.2rem 0.4rem", width: "auto", maxWidth: 200 }}>
+                    <option value="">Tous</option>
+                    {sectorsWithResults.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+              )}
+
+              {/* Filtre prix max (réutilise maxPrice) */}
+              <label style={{ fontSize: "0.68rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.4rem", margin: 0, textTransform: "none", letterSpacing: 0 }}>
+                Prix max
+                <select value={maxPrice} onChange={(e) => setMaxPrice(+e.target.value)} className="select" style={{ fontSize: "0.7rem", padding: "0.2rem 0.4rem", width: "auto" }}>
+                  {[0, 50, 100, 200, 300, 500, 1000].map((v) => <option key={v} value={v}>{v === 0 ? "Tous" : `≤ ${v} €`}</option>)}
+                </select>
+              </label>
+
+              <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
+                <button
+                  onClick={runBulkDeepAnalysis}
+                  disabled={bulkDeepRunning || displayed.length === 0}
+                  className="btn btn-secondary"
+                  style={{ fontSize: "0.7rem", opacity: bulkDeepRunning ? 0.6 : 1 }}
+                  title="Lancer l'analyse approfondie (Phase 2) sur tous les résultats affichés"
+                >
+                  {bulkDeepRunning ? "🔍 Analyse en cours…" : "🔍 Phase 2 sur tout"}
+                </button>
+                <button
+                  onClick={exportCSV}
+                  disabled={displayed.length === 0}
+                  className="btn btn-secondary"
+                  style={{ fontSize: "0.7rem" }}
+                  title="Exporter les résultats affichés (avec IA et Phase 2 si chargées) en CSV"
+                >
+                  ↓ Export CSV
+                </button>
+              </div>
+            </div>
 
             {/* Summary table */}
             <SectionTitle>Tableau des Opportunités</SectionTitle>
@@ -1135,12 +1228,30 @@ export default function OpportunitiesPage() {
                             {opp.sentiment_score > 0 ? "+" : ""}{opp.sentiment_score.toFixed(2)}
                           </td>
                           <td>
-                            <button
-                              style={{ fontSize: "0.65rem", color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
-                              onClick={() => toggleDetail(opp)}
-                            >
-                              {det?.open ? "Fermer" : "Détails"}
-                            </button>
+                            <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                              <button
+                                style={{ fontSize: "0.65rem", color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
+                                onClick={() => toggleDetail(opp)}
+                              >
+                                {det?.open ? "Fermer" : "Détails"}
+                              </button>
+                              <button
+                                style={{
+                                  fontSize: "0.62rem", padding: "0.15rem 0.4rem", borderRadius: 3, cursor: "pointer",
+                                  background: det?.deepAnalysis ? "rgba(61,158,110,0.15)" : "rgba(201,168,76,0.12)",
+                                  border: `1px solid ${det?.deepAnalysis ? GREEN + "55" : GOLD + "44"}`,
+                                  color: det?.deepAnalysis ? GREEN : GOLD, whiteSpace: "nowrap",
+                                }}
+                                title="Analyse approfondie (Phase 2)"
+                                disabled={det?.deepLoading}
+                                onClick={async () => {
+                                  if (!details[opp.ticker]?.open) await toggleDetail(opp);
+                                  launchDeepAnalysis(opp);
+                                }}
+                              >
+                                {det?.deepLoading ? "⏳" : det?.deepAnalysis ? "✓ Phase 2" : "🔍 Phase 2"}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                         {det?.open && (
@@ -1488,9 +1599,8 @@ export default function OpportunitiesPage() {
               />
             </div>
 
-            {/* Per-company detail */}
-            <SectionTitle>Détail par Entreprise</SectionTitle>
-            {filtered.map((opp) => {
+            {/* Détail par entreprise — fusionné dans le tableau ci-dessus (liste unique) */}
+            {([] as typeof filtered).map((opp) => {
               const det = details[opp.ticker];
               return (
                 <div key={opp.ticker} style={{ marginBottom: "0.75rem" }}>
