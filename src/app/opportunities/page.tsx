@@ -17,7 +17,7 @@ const ORANGE = "#d4834a";
 const SECTORS: Record<string, string[]> = {
   // ── FRANCE ───────────────────────────────────────────────────────────────
   "CAC 40": [
-    "AC.PA","AI.PA","AIR.PA","AXA.PA","BNP.PA","BN.PA","BVI.PA","CA.PA","CAP.PA",
+    "AC.PA","AI.PA","AIR.PA","CS.PA","BNP.PA","BN.PA","BVI.PA","CA.PA","CAP.PA",
     "ACA.PA","DG.PA","DSY.PA","EDEN.PA","EL.PA","ENGI.PA","ERF.PA","GLE.PA",
     "HO.PA","KER.PA","LR.PA","MC.PA","ML.PA","MT.AS","OR.PA","ORA.PA","PUB.PA",
     "RI.PA","RMS.PA","RNO.PA","SAF.PA","SAN.PA","SGO.PA","SU.PA","STLAM.PA",
@@ -112,7 +112,7 @@ const SECTORS: Record<string, string[]> = {
     "ALNA.PA","GENFIT.PA","ICAD.PA","IPH.PA",
   ],
   "🏦 Finance & Assurance": [
-    "BNP.PA","ACA.PA","GLE.PA","AXA.PA","ML.PA","BN.PA",
+    "BNP.PA","ACA.PA","GLE.PA","CS.PA","ML.PA","BN.PA",
     "DBK.DE","CBK.DE","ALV.DE","MUV2.DE",
     "ABN.AS","INGA.AS","ASRNL.AS","NN.AS",
     "ABI.BR","KBC.BR","GBLB.BR",
